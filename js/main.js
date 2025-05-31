@@ -748,3 +748,4 @@ function formatDateTime(dateInput) {
     else date = new Date(); 
      if (isNaN(date.getTime())) return "Data/hora inválida";
     return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date)
+}
