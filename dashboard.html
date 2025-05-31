@@ -13,7 +13,10 @@
     <style>
         /* Estilos do modal (podem ser movidos para styles.css) */
         .modal-backdrop.hidden {
-            display: none;
+            display: none !important; /* Força o modal a ficar escondido */
+        }
+        .modal-backdrop { /* Garante que seja visível quando não tiver a classe .hidden */
+            display: flex;
         }
         .modal-content {
             max-width: 500px; 
@@ -98,8 +101,7 @@
     
     <div id="temporaryAlertsContainer" class="temporary-alerts-container"></div>
     
-    <div id="productModal" class="modal-backdrop hidden">
-        <div class="modal-content">
+    <div id="productModal" class="modal-backdrop hidden"> <div class="modal-content">
             <div class="modal-header">
                 <h3 id="productModalTitle" class="modal-title">Adicionar Produto</h3>
                 <button id="closeProductModalButton" class="text-slate-400 hover:text-slate-200 text-2xl">&times;</button>
