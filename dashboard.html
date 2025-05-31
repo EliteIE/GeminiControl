@@ -9,6 +9,14 @@
     <link rel="stylesheet" href="fonts/inter.css">
     <style>
         /* Fallback para fontes */
+        /* Estilos do modal (podem ser movidos para styles.css) */
+        .modal-backdrop.hidden {
+            display: none;
+        }
+        .modal-content {
+            /* Estilos já definidos em styles.css, mas pode precisar de ajustes de max-width */
+            max-width: 500px; /* Ajuste conforme necessário */
+        }
     </style>
     <script src="js/chart.min.js"></script>
 </head>
@@ -19,58 +27,40 @@
                 <img src="images/logo.png" alt="EliteControl Logo" width="32" height="32">
                 <span class="header-logo-text">EliteControl</span>
             </div>
-            
             <div class="header-actions">
                 <div class="relative">
                     <button id="notificationBellButton" class="p-3 rounded-full hover:bg-slate-800 relative">
                         <i class="fas fa-bell"></i>
                         <span id="notificationCountBadge" class="notification-badge hidden">0</span>
                     </button>
-                    
                     <div id="notificationDropdown" class="notification-dropdown hidden">
                         <div class="notification-header">
                             <span class="notification-title">Notificações</span>
                             <span id="markAllAsReadButton" class="notification-action">Marcar todas como lidas</span>
                         </div>
-                        <div id="notificationList" class="notification-list">
+                        <div id="notificationList" class="notification-list scrollbar-thin">
                             </div>
                     </div>
                 </div>
-                
                 <div class="user-menu">
                     <button id="userMenuButton" class="user-button">
-                        <div id="userAvatar" class="user-avatar">
-                            <span id="userInitials">U</span>
-                        </div>
+                        <div id="userAvatar" class="user-avatar"><span id="userInitials">U</span></div>
                         <div class="user-info">
                             <div id="usernameDisplay" class="user-name">Usuário</div>
                             <div id="userRoleDisplay" class="user-role">Cargo</div>
                         </div>
                     </button>
-                    
                     <div id="userDropdown" class="user-dropdown hidden">
                         <div class="user-dropdown-header">
-                            <div class="user-dropdown-avatar">
-                                <span id="userDropdownInitials">U</span>
-                            </div>
+                            <div class="user-dropdown-avatar"><span id="userDropdownInitials">U</span></div>
                             <div id="userDropdownName" class="user-dropdown-name">Usuário</div>
                             <div id="userDropdownEmail" class="user-dropdown-email">usuario@exemplo.com</div>
                         </div>
-                        
                         <ul class="user-dropdown-menu">
-                            <li class="user-dropdown-item">
-                                <i class="fas fa-user user-dropdown-item-icon"></i>
-                                <span>Meu Perfil</span>
-                            </li>
-                            <li class="user-dropdown-item">
-                                <i class="fas fa-cog user-dropdown-item-icon"></i>
-                                <span>Configurações</span>
-                            </li>
+                            <li class="user-dropdown-item"><i class="fas fa-user user-dropdown-item-icon"></i><span>Meu Perfil</span></li>
+                            <li class="user-dropdown-item"><i class="fas fa-cog user-dropdown-item-icon"></i><span>Configurações</span></li>
                             <div class="user-dropdown-divider"></div>
-                            <li id="logoutButton" class="user-dropdown-item user-dropdown-item-logout">
-                                <i class="fas fa-sign-out-alt user-dropdown-item-icon"></i>
-                                <span>Sair</span>
-                            </li>
+                            <li id="logoutButton" class="user-dropdown-item user-dropdown-item-logout"><i class="fas fa-sign-out-alt user-dropdown-item-icon"></i><span>Sair</span></li>
                         </ul>
                     </div>
                 </div>
@@ -78,125 +68,62 @@
         </div>
     </header>
     
-    <aside id="sidebar" class="sidebar">
+    <aside id="sidebar" class="sidebar scrollbar-thin">
         <div class="sidebar-header">
-            <div id="sidebarProfileName" class="sidebar-title">Painel Vendedor</div>
+            <div id="sidebarProfileName" class="sidebar-title">Painel</div>
         </div>
-        
         <nav id="navLinks" class="nav-section">
             </nav>
     </aside>
     
     <main id="mainContent" class="main-content">
         <div class="page-header">
-            <h1 id="pageTitle" class="page-title">Painel Vendedor</h1>
+            <h1 id="pageTitle" class="page-title">Painel</h1>
             <p id="pageSubtitle" class="page-subtitle">Sua visão personalizada.</p>
         </div>
-        
         <div id="dynamicContentArea">
-            <div id="kpiContainer" class="kpi-container">
-                <div class="kpi-card">
-                    <div class="kpi-icon-wrapper">
-                        <i class="fas fa-dollar-sign kpi-icon"></i>
-                    </div>
-                    <div class="kpi-content">
-                        <div class="kpi-title">Minhas Vendas (Hoje)</div>
-                        <div class="kpi-value">R$ 0,00</div>
-                    </div>
-                </div>
-                
-                <div class="kpi-card">
-                    <div class="kpi-icon-wrapper">
-                        <i class="fas fa-shopping-cart kpi-icon"></i>
-                    </div>
-                    <div class="kpi-content">
-                        <div class="kpi-title">Nº de Vendas (Hoje)</div>
-                        <div class="kpi-value">0</div>
-                    </div>
-                </div>
-                
-                <div class="kpi-card">
-                    <div class="kpi-icon-wrapper">
-                        <i class="fas fa-box kpi-icon"></i>
-                    </div>
-                    <div class="kpi-content">
-                        <div class="kpi-title">Produtos Disponíveis</div>
-                        <div class="kpi-value">0</div>
-                    </div>
-                </div>
-                
-                <div class="kpi-card">
-                    <div class="kpi-icon-wrapper">
-                        <i class="fas fa-plus kpi-icon"></i>
-                    </div>
-                    <div class="kpi-content">
-                        <div class="kpi-title">Nova Venda</div>
-                        <div class="kpi-value">
-                            <button class="btn-primary" id="newSaleButton">Registrar</button>
-                        </div>
-                    </div>
-                </div>
             </div>
-            
-            <div id="chartsContainer" class="charts-container">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Vendas por Período</h3>
-                        <div class="chart-actions">
-                            <button class="chart-action-btn" id="salesChartOptionsButton">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chart-content">
-                        <canvas id="salesChart"></canvas>
-                    </div>
-                </div>
-                
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Produtos Mais Vendidos</h3>
-                        <div class="chart-actions">
-                            <button class="chart-action-btn" id="productsChartOptionsButton">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chart-content">
-                        <canvas id="productsChart"></canvas>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="activities-card">
-                <div class="activities-header">
-                    <h3 class="activities-title">Atividades Recentes</h3>
-                </div>
-                <ul id="recentActivitiesContainer" class="activities-list">
-                    <li class="activity-item">
-                        <div class="activity-icon">
-                            <i class="fas fa-check"></i>
-                        </div>
-                        <div class="activity-content">
-                            <div class="activity-text">Bem-vindo ao novo EliteControl! Sistema atualizado com sucesso.</div>
-                            <div class="activity-time">Agora</div>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-        </div>
     </main>
     
     <div id="temporaryAlertsContainer" class="temporary-alerts-container"></div>
     
-    <div id="modalPlaceholder"></div>
+    <div id="productModal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="productModalTitle" class="modal-title">Adicionar Produto</h3>
+                <button id="closeProductModalButton" class="text-slate-400 hover:text-slate-200 text-2xl">&times;</button>
+            </div>
+            <form id="productForm" class="modal-body space-y-4">
+                <input type="hidden" id="productId"> <div>
+                    <label for="productName" class="form-label">Nome do Produto</label>
+                    <input type="text" id="productName" name="productName" class="form-input" required>
+                </div>
+                <div>
+                    <label for="productCategory" class="form-label">Categoria</label>
+                    <input type="text" id="productCategory" name="productCategory" class="form-input" required>
+                </div>
+                <div>
+                    <label for="productPrice" class="form-label">Preço (R$)</label>
+                    <input type="number" id="productPrice" name="productPrice" class="form-input" step="0.01" min="0" required>
+                </div>
+                <div>
+                    <label for="productStock" class="form-label">Estoque</label>
+                    <input type="number" id="productStock" name="productStock" class="form-input" step="1" min="0" required>
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button id="cancelProductFormButton" class="btn-secondary py-2 px-4 rounded-md hover:bg-slate-600">Cancelar</button>
+                <button id="saveProductButton" type="submit" form="productForm" class="btn-primary py-2 px-4 rounded-md">Salvar Produto</button>
+            </div>
+        </div>
+    </div>
     
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <div id="modalPlaceholder"></div> <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-service.js"></script> 
-    <script src="js/main.js"></script>
+    <script src="js/chart.min.js"></script> <script src="js/main.js"></script>
 </body>
 </html>
