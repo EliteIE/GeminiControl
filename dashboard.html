@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EliteControl - Dashboard</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="fonts/fontawesome-all.min.css"> <link rel="stylesheet" href="fonts/inter.css">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" xintegrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <link rel="stylesheet" href="fonts/inter.css">
+    
     <style>
         /* Estilos do modal (podem ser movidos para styles.css) */
         .modal-backdrop.hidden {
@@ -15,7 +19,7 @@
             max-width: 500px; 
         }
     </style>
-    </head>
+</head>
 <body>
     <header class="header">
         <div class="header-content">
@@ -78,7 +82,18 @@
             <p id="pageSubtitle" class="page-subtitle">Sua visão personalizada.</p>
         </div>
         <div id="dynamicContentArea">
+            <div id="kpiContainer" class="kpi-container">
+                <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-dollar-sign kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Receita Total (Geral)</div><div class="kpi-value">R$ 0,00</div></div></div>
+                <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-shopping-cart kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Total de Vendas (Geral)</div><div class="kpi-value">0</div></div></div>
+                <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-box kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Total de Produtos</div><div class="kpi-value">0</div></div></div>
+                <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-plus kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Ação Rápida</div><div class="kpi-value"><button class="btn-primary" id="quickActionButton">Ação</button></div></div></div>
             </div>
+            <div id="chartsContainer" class="charts-container">
+                <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Vendas por Período</h3><div class="chart-actions"><button class="chart-action-btn" id="salesChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div><div class="chart-content"><canvas id="salesChart"></canvas></div></div>
+                <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Produtos Mais Vendidos</h3><div class="chart-actions"><button class="chart-action-btn" id="productsChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div><div class="chart-content"><canvas id="productsChart"></canvas></div></div>
+            </div>
+            <div class="activities-card"><div class="activities-header"><h3 class="activities-title">Atividades Recentes</h3></div><ul id="recentActivitiesContainer" class="activities-list"></ul></div>
+        </div>
     </main>
     
     <div id="temporaryAlertsContainer" class="temporary-alerts-container"></div>
@@ -91,22 +106,10 @@
             </div>
             <form id="productForm" class="modal-body space-y-4">
                 <input type="hidden" id="productId">
-                <div>
-                    <label for="productName" class="form-label">Nome do Produto</label>
-                    <input type="text" id="productName" name="productName" class="form-input" required>
-                </div>
-                <div>
-                    <label for="productCategory" class="form-label">Categoria</label>
-                    <input type="text" id="productCategory" name="productCategory" class="form-input" required>
-                </div>
-                <div>
-                    <label for="productPrice" class="form-label">Preço (R$)</label>
-                    <input type="number" id="productPrice" name="productPrice" class="form-input" step="0.01" min="0" required>
-                </div>
-                <div>
-                    <label for="productStock" class="form-label">Estoque</label>
-                    <input type="number" id="productStock" name="productStock" class="form-input" step="1" min="0" required>
-                </div>
+                <div><label for="productName" class="form-label">Nome do Produto</label><input type="text" id="productName" name="productName" class="form-input" required></div>
+                <div><label for="productCategory" class="form-label">Categoria</label><input type="text" id="productCategory" name="productCategory" class="form-input" required></div>
+                <div><label for="productPrice" class="form-label">Preço (R$)</label><input type="number" id="productPrice" name="productPrice" class="form-input" step="0.01" min="0" required></div>
+                <div><label for="productStock" class="form-label">Estoque</label><input type="number" id="productStock" name="productStock" class="form-input" step="1" min="0" required></div>
             </form>
             <div class="modal-footer">
                 <button id="cancelProductFormButton" class="btn-secondary py-2 px-4 rounded-md hover:bg-slate-600">Cancelar</button>
@@ -121,8 +124,10 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" xintegrity="sha512-CQfn+I3tbJslümanRuSPKcPWA9KGSvZpP8KcNsyHhVdtgGKNAUmYV3WHzSZYH3L3GSR4P5K2sV0pMvP/2/yS2uA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-service.js"></script> 
-    <script src="js/chart.min.js"></script> <script src="js/main.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
