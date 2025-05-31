@@ -5,21 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EliteControl - Dashboard</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="fonts/fontawesome-all.min.css">
-    <link rel="stylesheet" href="fonts/inter.css">
+    <link rel="stylesheet" href="fonts/fontawesome-all.min.css"> <link rel="stylesheet" href="fonts/inter.css">
     <style>
-        /* Fallback para fontes */
         /* Estilos do modal (podem ser movidos para styles.css) */
         .modal-backdrop.hidden {
             display: none;
         }
         .modal-content {
-            /* Estilos já definidos em styles.css, mas pode precisar de ajustes de max-width */
-            max-width: 500px; /* Ajuste conforme necessário */
+            max-width: 500px; 
         }
     </style>
-    <script src="js/chart.min.js"></script>
-</head>
+    </head>
 <body>
     <header class="header">
         <div class="header-content">
@@ -94,7 +90,8 @@
                 <button id="closeProductModalButton" class="text-slate-400 hover:text-slate-200 text-2xl">&times;</button>
             </div>
             <form id="productForm" class="modal-body space-y-4">
-                <input type="hidden" id="productId"> <div>
+                <input type="hidden" id="productId">
+                <div>
                     <label for="productName" class="form-label">Nome do Produto</label>
                     <input type="text" id="productName" name="productName" class="form-input" required>
                 </div>
@@ -118,7 +115,9 @@
         </div>
     </div>
     
-    <div id="modalPlaceholder"></div> <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <div id="modalPlaceholder"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
