@@ -1,19 +1,22 @@
 // js/main.js - Com Modal de Produtos, Carregamento de Seções e Dashboard Dinâmico
 
-// Variáveis globais para o modal de produto
-const productModal = document.getElementById('productModal');
-const productForm = document.getElementById('productForm');
-const productModalTitle = document.getElementById('productModalTitle');
-const productIdField = document.getElementById('productId');
-const productNameField = document.getElementById('productName');
-const productCategoryField = document.getElementById('productCategory');
-const productPriceField = document.getElementById('productPrice');
-const productStockField = document.getElementById('productStock');
-const closeProductModalButton = document.getElementById('closeProductModalButton');
-const cancelProductFormButton = document.getElementById('cancelProductFormButton');
+// Variáveis globais para o modal de produto (garantir que sejam declaradas antes de DOMContentLoaded se usadas fora)
+let productModal, productForm, productModalTitle, productIdField, productNameField, productCategoryField, productPriceField, productStockField, closeProductModalButton, cancelProductFormButton;
 
 // Configurações e Inicialização
 document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar variáveis do modal aqui, após o DOM estar pronto
+    productModal = document.getElementById('productModal');
+    productForm = document.getElementById('productForm');
+    productModalTitle = document.getElementById('productModalTitle');
+    productIdField = document.getElementById('productId');
+    productNameField = document.getElementById('productName');
+    productCategoryField = document.getElementById('productCategory');
+    productPriceField = document.getElementById('productPrice');
+    productStockField = document.getElementById('productStock');
+    closeProductModalButton = document.getElementById('closeProductModalButton');
+    cancelProductFormButton = document.getElementById('cancelProductFormButton');
+
     setupEventListeners();
     
     firebase.auth().onAuthStateChanged(async (user) => {
@@ -27,12 +30,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log("userDataFromService.role encontrado:", userDataFromService.role);
                     localStorage.setItem('elitecontrol_user_role', userDataFromService.role); 
                     
-                    const currentUser = { uid: user.uid, email: user.email, ...userDataFromService };
+                    const currentUser = { 
+                        uid: user.uid, 
+                        email: user.email, 
+                        ...userDataFromService 
+                    };
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
-                    const basePath = "/GeminiControl/"; 
-                    const isIndexPage = currentPath.endsWith('index.html') || currentPath === '/' || currentPath === basePath || currentPath === basePath + "index.html";
+                    // Ajuste para o caminho base no GitHub Pages
+                    const basePath = (window.location.hostname === "eliteie.github.io") ? "/GeminiControl/" : "/";
+                    const isIndexPage = currentPath.endsWith('index.html') || currentPath === basePath || currentPath === basePath + "index.html";
                     const isDashboardPage = currentPath.includes('dashboard.html');
 
                     if (isIndexPage) {
@@ -41,9 +49,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else if (isDashboardPage) {
                         console.log("Já está no dashboard, verificando hash da URL...");
                         const section = window.location.hash.substring(1);
-                        if (section && section !== "#" && section !== "geral" && section !== "vendas-painel" && section !== "estoque") {
+                        const defaultSection = currentUser.role === 'Vendedor' ? 'vendas-painel' : (currentUser.role === 'Controlador de Estoque' ? 'estoque' : 'geral');
+                        
+                        if (section && section !== "#" && section !== defaultSection) {
                             await loadSectionContent(section, currentUser);
                         } else {
+                            // Se não houver hash ou for a seção padrão do perfil, carrega o dashboard
+                            window.location.hash = defaultSection; // Garante que o hash reflita a seção padrão
                             await loadDashboardData(currentUser); 
                         }
                     }
@@ -65,10 +77,11 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Nenhum usuário logado (onAuthStateChanged).");
             localStorage.removeItem('elitecontrol_user_role');
             if (document.getElementById('userInitials')) clearDashboardUI();
-            const basePath = "/GeminiControl/";
-            const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname === basePath || window.location.pathname === basePath + "index.html";
+
+            const basePath = (window.location.hostname === "eliteie.github.io") ? "/GeminiControl/" : "/";
+            const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === basePath || window.location.pathname === basePath + "index.html";
             if (!isIndexPage) {
-                console.log("Redirecionando para index.html pois não está logado e não está na index.");
+                 console.log("Redirecionando para index.html pois não está logado e não está na index.");
                 window.location.href = 'index.html'; 
             }
         }
@@ -77,19 +90,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // --- Funções do Modal de Produto ---
 function openProductModal(product = null) {
-    productForm.reset(); // Limpa o formulário
-    if (product) { // Modo Edição
+    if (!productModal || !productForm || !productModalTitle || !productIdField || !productNameField || !productCategoryField || !productPriceField || !productStockField) {
+        console.error("Elementos do modal de produto não encontrados no DOM.");
+        return;
+    }
+    productForm.reset(); 
+    if (product) { 
         productModalTitle.textContent = 'Editar Produto';
         productIdField.value = product.id;
         productNameField.value = product.name;
         productCategoryField.value = product.category;
         productPriceField.value = product.price;
         productStockField.value = product.stock;
-    } else { // Modo Adição
+    } else { 
         productModalTitle.textContent = 'Adicionar Novo Produto';
-        productIdField.value = ''; // Garante que o ID esteja vazio para adição
+        productIdField.value = ''; 
     }
-    if (productModal) productModal.classList.remove('hidden');
+    productModal.classList.remove('hidden');
 }
 
 function closeProductModal() {
@@ -98,6 +115,10 @@ function closeProductModal() {
 
 async function handleProductFormSubmit(event) {
     event.preventDefault();
+    if (!productNameField || !productCategoryField || !productPriceField || !productStockField || !productIdField) {
+        console.error("Campos do formulário de produto não encontrados.");
+        return;
+    }
     const id = productIdField.value;
     const productData = {
         name: productNameField.value,
@@ -112,23 +133,28 @@ async function handleProductFormSubmit(event) {
     }
 
     const saveButton = document.getElementById('saveProductButton');
+    if (!saveButton) return;
     saveButton.disabled = true;
     saveButton.textContent = 'Salvando...';
 
     try {
-        if (id) { // Edição
+        if (id) { 
             await DataService.updateProduct(id, productData);
             showTemporaryAlert('Produto atualizado com sucesso!', 'success');
-        } else { // Adição
+        } else { 
             await DataService.addProduct(productData);
             showTemporaryAlert('Produto adicionado com sucesso!', 'success');
         }
         closeProductModal();
-        // Recarregar a lista de produtos para refletir as mudanças
         const currentUser = firebase.auth().currentUser;
         if (currentUser) {
             const userRole = localStorage.getItem('elitecontrol_user_role');
-            loadSectionContent('produtos', { uid: currentUser.uid, email: currentUser.email, role: userRole });
+            // Garante que está recarregando a seção de produtos
+            if(window.location.hash === "#produtos" || window.location.hash === "#produtos-consulta"){
+                loadSectionContent(window.location.hash.substring(1), {uid: currentUser.uid, email: currentUser.email, role: userRole });
+            } else { // Se não estiver na seção de produtos, força o hash e recarrega
+                window.location.hash = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
+            }
         }
     } catch (error) {
         console.error("Erro ao salvar produto:", error);
@@ -146,7 +172,7 @@ async function loadDashboardData(currentUser) {
         return; 
     }
     const dynamicContentArea = document.getElementById('dynamicContentArea');
-    if (!dynamicContentArea) return;
+    if (!dynamicContentArea) { console.error("dynamicContentArea não encontrado"); return;}
 
     dynamicContentArea.innerHTML = `
         <div id="kpiContainer" class="kpi-container">
@@ -186,7 +212,7 @@ async function loadDashboardData(currentUser) {
 async function loadSectionContent(sectionId, currentUser) {
     console.log(`Carregando seção: ${sectionId} para usuário:`, currentUser);
     const dynamicContentArea = document.getElementById('dynamicContentArea');
-    if (!dynamicContentArea) return;
+    if (!dynamicContentArea) {console.error("dynamicContentArea não encontrado em loadSectionContent"); return;}
 
     dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin fa-2x"></i> Carregando ${sectionId}...</div>`;
     showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500);
@@ -195,22 +221,29 @@ async function loadSectionContent(sectionId, currentUser) {
         if (sectionId === 'produtos' || sectionId === 'produtos-consulta') {
             const products = await DataService.getProducts();
             renderProductsList(products, dynamicContentArea, currentUser.role);
-        } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque' || !sectionId) { // Adicionado !sectionId para tratar hash vazio
+        } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque' || !sectionId) { 
             await loadDashboardData(currentUser);
+        } else if (sectionId === 'registrar-venda') {
+            // TODO: Implementar renderização da tela de registrar venda
+            dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "Registrar Venda" a ser implementada.</div>`;
+        } else if (sectionId === 'vendas') {
+            // TODO: Implementar renderização da tela de histórico/relatório de vendas
+            dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "Vendas (Hist/Rel)" a ser implementada.</div>`;
         }
-        // TODO: Adicionar 'else if' para outras seções (registrar-venda, vendas, usuarios, config, etc.)
+        // Adicionar mais 'else if' para outras seções conforme necessário
         else {
             dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "${sectionId}" ainda não implementada.</div>`;
         }
     } catch (error) {
         console.error(`Erro ao carregar seção ${sectionId}:`, error);
         dynamicContentArea.innerHTML = `<div class="p-8 text-center text-red-400">Erro ao carregar conteúdo. Tente novamente.</div>`;
-        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, 'error');
+        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, "error");
     }
 }
 
 // Função para renderizar a lista de produtos
 function renderProductsList(products, container, userRole) {
+    if (!container) { console.error("Container da lista de produtos não encontrado."); return; }
     container.innerHTML = ''; 
     const title = document.createElement('h2');
     title.className = 'text-xl font-semibold text-slate-100 mb-4';
@@ -219,15 +252,17 @@ function renderProductsList(products, container, userRole) {
 
     if (userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') {
         const addProductButton = document.createElement('button');
-        addProductButton.id = 'openAddProductModalButton'; // ID para o listener
+        addProductButton.id = 'openAddProductModalButton'; 
         addProductButton.className = 'btn-primary mb-4 inline-flex items-center';
         addProductButton.innerHTML = '<i class="fas fa-plus mr-2"></i> Adicionar Novo Produto';
-        // O listener será adicionado em setupEventListeners
-        container.appendChild(addProductButton);
+        container.appendChild(addProductButton); // O listener é delegado em setupEventListeners
     }
 
     if (!products || products.length === 0) {
-        container.innerHTML += '<p class="text-slate-400">Nenhum produto encontrado.</p>';
+        const noProductsP = document.createElement('p');
+        noProductsP.className = 'text-slate-400';
+        noProductsP.textContent = 'Nenhum produto encontrado.';
+        container.appendChild(noProductsP);
         return;
     }
 
@@ -250,31 +285,31 @@ function renderProductsList(products, container, userRole) {
     products.forEach(product => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-750 transition-colors duration-150';
+        let actionsHtml = '';
+        if (userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') {
+            actionsHtml = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                <button class="text-sky-400 hover:text-sky-300 mr-2 edit-product-btn" data-product-id="${product.id}"><i class="fas fa-edit"></i></button>
+                <button class="text-red-500 hover:text-red-400 delete-product-btn" data-product-id="${product.id}" data-product-name="${product.name}"><i class="fas fa-trash"></i></button>
+            </td>`;
+        }
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-200">${product.name}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${product.category}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatCurrency(product.price)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm ${product.stock < 20 ? 'text-red-400 font-semibold' : 'text-slate-300'}">${product.stock}</td>
-            ${(userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') ? `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                <button class="text-sky-400 hover:text-sky-300 mr-2 edit-product-btn" data-product-id="${product.id}"><i class="fas fa-edit"></i></button>
-                <button class="text-red-500 hover:text-red-400 delete-product-btn" data-product-id="${product.id}" data-product-name="${product.name}"><i class="fas fa-trash"></i></button>
-            </td>` : ''}
+            ${actionsHtml}
         `;
         tbody.appendChild(tr);
     });
     container.appendChild(table);
 }
 
-// Funções globais para botões de ação da tabela (os listeners serão delegados)
 window.handleEditProduct = async (productId) => { 
+    console.log("Tentando editar produto com ID:", productId);
     try {
-        // Esta função buscará o produto no DataService para popular o modal
-        // Por enquanto, vamos simular ou buscar do array 'allProducts' se disponível globalmente
-        // Idealmente, DataService.getProductById(productId) seria chamado.
-        // Para este exemplo, vamos assumir que 'products' está acessível ou buscamos novamente.
-        const products = await DataService.getProducts(); // Pode otimizar para não buscar sempre
-        const productToEdit = products.find(p => p.id === productId);
+        // Esta função agora busca o produto diretamente do DataService
+        const productToEdit = await DataService.getProductById(productId); // Supondo que você implementará getProductById
         if (productToEdit) {
             openProductModal(productToEdit);
         } else {
@@ -291,7 +326,15 @@ window.handleDeleteProductConfirmation = (productId, productName) => {
             .then(() => {
                 showTemporaryAlert(`Produto "${productName}" excluído com sucesso.`, 'success');
                 const currentUser = firebase.auth().currentUser;
-                if(currentUser) loadSectionContent('produtos', {uid: currentUser.uid, role: localStorage.getItem('elitecontrol_user_role')});
+                if(currentUser) {
+                    const userRole = localStorage.getItem('elitecontrol_user_role');
+                     // Garante que está recarregando a seção de produtos
+                    if(window.location.hash === "#produtos" || window.location.hash === "#produtos-consulta"){
+                        loadSectionContent(window.location.hash.substring(1), {uid: currentUser.uid, email: currentUser.email, role: userRole });
+                    } else { 
+                        window.location.hash = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
+                    }
+                }
             })
             .catch(err => {
                 console.error("Erro ao excluir produto:", err);
@@ -299,7 +342,6 @@ window.handleDeleteProductConfirmation = (productId, productName) => {
             });
     }
 };
-
 
 // Atualizar KPIs do Dashboard
 function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser) {
@@ -319,9 +361,9 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
 
     if (currentUser.role === 'Vendedor') {
         if (kpiTitle1) kpiTitle1.textContent = "Minhas Vendas (Hoje)";
-        if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats.todayRevenue); 
+        if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats ? salesStats.todayRevenue : 0); 
         if (kpiTitle2) kpiTitle2.textContent = "Nº de Vendas (Hoje)";
-        if (kpiValue2) kpiValue2.textContent = salesStats.todaySales; 
+        if (kpiValue2) kpiValue2.textContent = salesStats ? salesStats.todaySales : 0; 
         if (kpiTitle3) kpiTitle3.textContent = "Produtos Disponíveis";
         if (kpiValue3) kpiValue3.textContent = allProducts ? allProducts.length : 0;
         if (kpiTitle4) kpiTitle4.textContent = "Nova Venda";
@@ -334,26 +376,26 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
         }
     } else if (currentUser.role === 'Controlador de Estoque') {
         if (kpiTitle1) kpiTitle1.textContent = "Total de Produtos";
-        if (kpiValue1) kpiValue1.textContent = productStats.totalProducts;
+        if (kpiValue1) kpiValue1.textContent = productStats ? productStats.totalProducts : 0;
         if (kpiTitle2) kpiTitle2.textContent = "Produtos c/ Estoque Baixo";
-        if (kpiValue2) kpiValue2.textContent = productStats.lowStock;
+        if (kpiValue2) kpiValue2.textContent = productStats ? productStats.lowStock : 0;
         if (kpiTitle3) kpiTitle3.textContent = "Nº de Categorias";
-        if (kpiValue3) kpiValue3.textContent = productStats.categories ? Object.keys(productStats.categories).length : 0;
+        if (kpiValue3) kpiValue3.textContent = productStats && productStats.categories ? Object.keys(productStats.categories).length : 0;
         if (kpiTitle4) kpiTitle4.textContent = "Adicionar Produto";
-         if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#addProductFromKPIButton')) { // Novo ID para evitar conflito
+         if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#addProductFromKPIButton')) { 
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="addProductFromKPIButton">Adicionar</button>`;
              const addProductKPIButton = document.getElementById('addProductFromKPIButton');
              if(addProductKPIButton) addProductKPIButton.addEventListener('click', () => {
-                openProductModal(); // Abre o modal para adicionar novo produto
+                openProductModal(); 
              });
         }
     } else if (currentUser.role === 'Dono/Gerente') {
         if (kpiTitle1) kpiTitle1.textContent = "Receita Total (Geral)";
-        if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats.totalRevenue);
+        if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats ? salesStats.totalRevenue : 0);
         if (kpiTitle2) kpiTitle2.textContent = "Total de Vendas (Geral)";
-        if (kpiValue2) kpiValue2.textContent = salesStats.totalSales;
+        if (kpiValue2) kpiValue2.textContent = salesStats ? salesStats.totalSales : 0;
         if (kpiTitle3) kpiTitle3.textContent = "Total de Produtos";
-        if (kpiValue3) kpiValue3.textContent = productStats.totalProducts;
+        if (kpiValue3) kpiValue3.textContent = productStats ? productStats.totalProducts : 0;
         if (kpiTitle4) kpiTitle4.textContent = "Ver Relatórios";
          if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#viewReportsButton')) {
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="viewReportsButton">Detalhes</button>`;
@@ -367,14 +409,8 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
 
 // Função para renderizar gráficos do dashboard com dados dinâmicos
 function renderDashboardMainCharts(salesStats, topProductsData) {
-    if (!document.getElementById('salesChart') || typeof Chart === 'undefined') {
-        console.warn("Elemento do gráfico 'salesChart' ou Chart.js não disponível.");
-        return;
-    }
-    if (!salesStats || !topProductsData) {
-        console.warn("Dados para gráficos não disponíveis.");
-        return;
-    }
+    if (!document.getElementById('salesChart') || typeof Chart === 'undefined') { return; }
+    if (!salesStats || !topProductsData) { return; }
     const salesCtx = document.getElementById('salesChart').getContext('2d');
     if (window.salesChartInstance) window.salesChartInstance.destroy();
     const salesChartRenderData = {
@@ -540,15 +576,29 @@ function setupEventListeners() {
     
     window.addEventListener('hashchange', () => {
         const currentUser = firebase.auth().currentUser;
-        if (currentUser && localStorage.getItem('elitecontrol_user_role')) {
-            const section = window.location.hash.substring(1);
-            const userRole = localStorage.getItem('elitecontrol_user_role');
-            // Atualiza a classe 'active' na sidebar
-            document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
-            const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${section || 'geral'}"]`); // 'geral' se hash vazio
-            if (activeLink) activeLink.classList.add('active');
-            
-            loadSectionContent(section || (userRole === 'Vendedor' ? 'vendas-painel' : (userRole === 'Controlador de Estoque' ? 'estoque' : 'geral')), {uid: currentUser.uid, email: currentUser.email, role: userRole});
+        if (currentUser) { // Verifica se currentUser existe antes de acessar propriedades
+            const userRoleFromStorage = localStorage.getItem('elitecontrol_user_role');
+            if (userRoleFromStorage) {
+                const section = window.location.hash.substring(1);
+                const defaultSection = userRoleFromStorage === 'Vendedor' ? 'vendas-painel' : (userRoleFromStorage === 'Controlador de Estoque' ? 'estoque' : 'geral');
+                
+                document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
+                const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${section || defaultSection}"]`); 
+                if (activeLink) activeLink.classList.add('active');
+                
+                loadSectionContent(section || defaultSection, {uid: currentUser.uid, email: currentUser.email, role: userRoleFromStorage});
+            } else {
+                // Se não tiver role no localStorage, tenta buscar novamente
+                 DataService.getUserData(currentUser.uid).then(userData => {
+                    if(userData && userData.role){
+                        localStorage.setItem('elitecontrol_user_role', userData.role);
+                        // Tenta carregar a seção novamente
+                        const section = window.location.hash.substring(1);
+                        const defaultSection = userData.role === 'Vendedor' ? 'vendas-painel' : (userData.role === 'Controlador de Estoque' ? 'estoque' : 'geral');
+                        loadSectionContent(section || defaultSection, {uid: currentUser.uid, email: currentUser.email, ...userData});
+                    }
+                 });
+            }
         }
     });
     document.addEventListener('click', function(e) {
@@ -558,7 +608,6 @@ function setupEventListeners() {
             const section = navLink.dataset.section;
             window.location.hash = section; 
         }
-        // Delegação de eventos para botões de produto
         if (e.target.closest('.edit-product-btn')) {
             const button = e.target.closest('.edit-product-btn');
             window.handleEditProduct(button.dataset.productId);
@@ -567,9 +616,12 @@ function setupEventListeners() {
             const button = e.target.closest('.delete-product-btn');
             window.handleDeleteProductConfirmation(button.dataset.productId, button.dataset.productName);
         }
-        // Listener para o botão "Adicionar Novo Produto" que é renderizado dinamicamente
-        if (e.target.id === 'openAddProductModalButton' || e.target.closest('#openAddProductModalButton')) {
+        if (e.target.id === 'openAddProductModalButton' || (e.target.closest('#openAddProductModalButton'))) { // Verifica se o clique foi no botão ou em um filho
              openProductModal();
+        }
+         // Listener para o botão Adicionar do KPI de Controlador de Estoque
+        if (e.target.id === 'addProductFromKPIButton' || (e.target.closest('#addProductFromKPIButton'))) {
+            openProductModal();
         }
     });
 
@@ -595,10 +647,14 @@ function setupEventListeners() {
             }
         });
     }
-    // Listeners para o modal de produto
-    if (closeProductModalButton) closeProductModalButton.addEventListener('click', closeProductModal);
-    if (cancelProductFormButton) cancelProductFormButton.addEventListener('click', closeProductModal);
-    if (productForm) productForm.addEventListener('submit', handleProductFormSubmit);
+    // Listeners para o modal de produto (adicionados aqui para garantir que os elementos existam)
+    const localCloseProductModalButton = document.getElementById('closeProductModalButton');
+    const localCancelProductFormButton = document.getElementById('cancelProductFormButton');
+    const localProductForm = document.getElementById('productForm');
+
+    if (localCloseProductModalButton) localCloseProductModalButton.addEventListener('click', closeProductModal);
+    if (localCancelProductFormButton) localCancelProductFormButton.addEventListener('click', closeProductModal);
+    if (localProductForm) localProductForm.addEventListener('submit', handleProductFormSubmit);
 }
 
 async function handleLogin(e) {
@@ -668,24 +724,21 @@ function updateNotificationsUI() {
             if (n.type === 'warning') badgeClass = 'warning';
             else if (n.type === 'error') badgeClass = 'error';
             else if (n.type === 'success') badgeClass = 'success';
-            const item = document.createElement('div'); 
-            item.className = `notification-item ${n.read ? '' : 'unread'}`;
-            item.dataset.id = n.id;
-            item.innerHTML = `
-                <div class="notification-item-header">
-                    <div class="notification-item-title">${n.title}</div>
-                    <div class="notification-item-badge ${badgeClass}">${n.type.charAt(0).toUpperCase() + n.type.slice(1)}</div>
-                </div>
-                <div class="notification-item-message">${n.message}</div>
-                <div class="notification-item-footer">
-                    <div class="notification-item-time">${n.time}</div>
-                    ${!n.read ? '<div class="notification-item-action">Marcar como lida</div>' : ''}
-                </div>`;
-            item.addEventListener('click', () => markNotificationAsRead(n.id)); 
-            return item.outerHTML; 
+            // Não adicionar o listener aqui diretamente se for apenas innerHTML
+            return `<div class="notification-item ${n.read ? '' : 'unread'}" data-id="${n.id}" onclick="markNotificationAsRead('${n.id}')">
+                        <div class="notification-item-header">
+                            <div class="notification-item-title">${n.title}</div>
+                            <div class="notification-item-badge ${badgeClass}">${n.type.charAt(0).toUpperCase() + n.type.slice(1)}</div>
+                        </div>
+                        <div class="notification-item-message">${n.message}</div>
+                        <div class="notification-item-footer">
+                            <div class="notification-item-time">${n.time}</div>
+                            ${!n.read ? '<div class="notification-item-action">Marcar como lida</div>' : ''}
+                        </div>
+                    </div>`;
         }).join('');
 }
-function markNotificationAsRead(id) {
+function markNotificationAsRead(id) { // Chamada por onclick no HTML
     let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]');
     notifications = notifications.map(n => n.id === id ? { ...n, read: true } : n);
     localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications));
@@ -703,14 +756,14 @@ function markAllNotificationsAsRead() {
 function initializeSidebar(role) { 
     if (!document.getElementById('navLinks') || !role) return;
     let links = [];
-    // Define qual link é ativo baseado no hash da URL ou no primeiro link se não houver hash
     const currentHash = window.location.hash.substring(1);
     const defaultActiveSection = (role === 'Vendedor' ? 'vendas-painel' : (role === 'Controlador de Estoque' ? 'estoque' : 'geral'));
+    const isActive = (section) => currentHash ? currentHash === section : section === defaultActiveSection;
 
-    if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: (!currentHash || currentHash === 'geral'), section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: (currentHash === 'produtos'), section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: (currentHash === 'registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', active: (currentHash === 'vendas'), section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', active: (currentHash === 'usuarios'), section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ];
-    else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: (!currentHash || currentHash === 'estoque'), section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: (currentHash === 'produtos'), section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', active: (currentHash === 'fornecedores'), section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', active: (currentHash === 'movimentacoes'), section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', active: (currentHash === 'relatorios-estoque'), section: 'relatorios-estoque' }, { icon: 'fa-cogs', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ];
-    else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: (!currentHash || currentHash === 'vendas-painel'), section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', active: (currentHash === 'produtos-consulta'), section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: (currentHash === 'registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', active: (currentHash === 'minhas-vendas'), section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', active: (currentHash === 'clientes'), section: 'clientes' }, { icon: 'fa-cogs', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ];
-    else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); }
+    if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: isActive('geral'), section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', active: isActive('vendas'), section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', active: isActive('usuarios'), section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ];
+    else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: isActive('estoque'), section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', active: isActive('fornecedores'), section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', active: isActive('movimentacoes'), section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', active: isActive('relatorios-estoque'), section: 'relatorios-estoque' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ];
+    else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: isActive('vendas-painel'), section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', active: isActive('produtos-consulta'), section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', active: isActive('minhas-vendas'), section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', active: isActive('clientes'), section: 'clientes' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ];
+    else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', active: isActive('config'), section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); }
     
     const navLinksContainer = document.getElementById('navLinks');
     navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join('');
@@ -747,5 +800,6 @@ function formatDateTime(dateInput) {
     else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput);
     else date = new Date(); 
      if (isNaN(date.getTime())) return "Data/hora inválida";
-    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date)
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
+
