@@ -1,4 +1,4 @@
-// js/main.js - Com Dashboard Dinâmico e Autenticação Firebase
+// js/main.js - Com Carregamento de Seções e Dashboard Dinâmico
 
 // Configurações e Inicialização
 document.addEventListener('DOMContentLoaded', function() {
@@ -23,15 +23,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
-                    const basePath = "/GeminiControl/"; // Ajuste se o nome do seu repositório for diferente
+                    const basePath = "/GeminiControl/"; 
                     const isIndexPage = currentPath.endsWith('index.html') || currentPath === '/' || currentPath === basePath || currentPath === basePath + "index.html";
+                    const isDashboardPage = currentPath.includes('dashboard.html');
 
                     if (isIndexPage) {
                         console.log("Redirecionando para dashboard.html...");
                         window.location.href = 'dashboard.html';
-                    } else if (currentPath.includes('dashboard.html')) {
-                        console.log("Já está no dashboard, carregando dados...");
-                        await loadDashboardData(currentUser); // Chama o carregamento dos dados do dashboard
+                    } else if (isDashboardPage) {
+                        console.log("Já está no dashboard, verificando hash da URL...");
+                        // Verifica se há uma seção na URL (ex: #produtos) para carregar
+                        if (window.location.hash && window.location.hash !== "#" && window.location.hash !== "#geral") { // Não recarrega #geral que é o padrão
+                            const section = window.location.hash.substring(1);
+                            await loadSectionContent(section, currentUser);
+                        } else {
+                            // Carrega dados padrão do dashboard (KPIs, gráficos) se não houver hash ou for #geral
+                            await loadDashboardData(currentUser); 
+                        }
                     } else {
                         console.warn("Não redirecionou, pathname não correspondeu:", currentPath);
                     }
@@ -59,42 +67,187 @@ document.addEventListener('DOMContentLoaded', function() {
             const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname === basePath || window.location.pathname === basePath + "index.html";
             if (!isIndexPage) {
                  console.log("Redirecionando para index.html pois não está logado e não está na index.");
-                window.location.href = 'index.html';
+                window.location.href = 'index.html'; 
             }
         }
     });
 });
 
-// Função para carregar e exibir dados dinâmicos no dashboard
+// Função para carregar e exibir dados dinâmicos no dashboard (KPIs, gráficos)
 async function loadDashboardData(currentUser) {
     if (!currentUser || !DataService) {
         console.warn("loadDashboardData: currentUser ou DataService não disponível.");
         return; 
     }
+    const dynamicContentArea = document.getElementById('dynamicContentArea');
+    if (!dynamicContentArea) return;
+
+    // Restaurar HTML padrão do dashboard (KPIs, Gráficos, Atividades)
+    dynamicContentArea.innerHTML = `
+        <div id="kpiContainer" class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-icon-wrapper"><i class="fas fa-dollar-sign kpi-icon"></i></div>
+                <div class="kpi-content"><div class="kpi-title">Receita Total (Geral)</div><div class="kpi-value">R$ 0,00</div></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon-wrapper"><i class="fas fa-shopping-cart kpi-icon"></i></div>
+                <div class="kpi-content"><div class="kpi-title">Total de Vendas (Geral)</div><div class="kpi-value">0</div></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon-wrapper"><i class="fas fa-box kpi-icon"></i></div>
+                <div class="kpi-content"><div class="kpi-title">Total de Produtos</div><div class="kpi-value">0</div></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon-wrapper"><i class="fas fa-plus kpi-icon"></i></div>
+                <div class="kpi-content"><div class="kpi-title">Ação Rápida</div><div class="kpi-value"><button class="btn-primary" id="quickActionButton">Ação</button></div></div>
+            </div>
+        </div>
+        <div id="chartsContainer" class="charts-container">
+            <div class="chart-card">
+                <div class="chart-header"><h3 class="chart-title">Vendas por Período</h3><div class="chart-actions"><button class="chart-action-btn" id="salesChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div>
+                <div class="chart-content"><canvas id="salesChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header"><h3 class="chart-title">Produtos Mais Vendidos</h3><div class="chart-actions"><button class="chart-action-btn" id="productsChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div>
+                <div class="chart-content"><canvas id="productsChart"></canvas></div>
+            </div>
+        </div>
+        <div class="activities-card">
+            <div class="activities-header"><h3 class="activities-title">Atividades Recentes</h3></div>
+            <ul id="recentActivitiesContainer" class="activities-list"></ul>
+        </div>
+    `;
+    // Re-adicionar listeners para botões de opções dos gráficos se necessário
+    const salesChartOptionsButton = document.getElementById('salesChartOptionsButton');
+    if (salesChartOptionsButton) salesChartOptionsButton.addEventListener('click', () => showTemporaryAlert('Opções do gráfico de vendas', 'info'));
+    const productsChartOptionsButton = document.getElementById('productsChartOptionsButton');
+    if (productsChartOptionsButton) productsChartOptionsButton.addEventListener('click', () => showTemporaryAlert('Opções do gráfico de produtos', 'info'));
+
 
     try {
         showTemporaryAlert("Carregando dados do dashboard...", "info", 2000);
-
-        // Buscar dados em paralelo
         const [productStats, salesStats, topProductsData, allProducts, recentSalesData] = await Promise.all([
-            DataService.getProductStats(),
-            DataService.getSalesStats(),
-            DataService.getTopProducts(5), 
-            DataService.getProducts(), 
-            DataService.getSales() // Pega todas as vendas, ordenadas por data no DataService
+            DataService.getProductStats(), DataService.getSalesStats(),
+            DataService.getTopProducts(5), DataService.getProducts(), DataService.getSales()
         ]);
-        
         console.log("Dados para KPIs e Gráficos carregados:", { productStats, salesStats, topProductsData, allProducts, recentSalesData });
-
         updateDashboardKPIs(salesStats, productStats, allProducts, currentUser);
         renderDashboardMainCharts(salesStats, topProductsData); 
-        updateRecentActivitiesUI(recentSalesData.slice(0, 5)); // Mostra as 5 vendas mais recentes
-
+        updateRecentActivitiesUI(recentSalesData.slice(0, 5)); 
     } catch (error) {
         console.error("Erro ao carregar dados dinâmicos do dashboard:", error);
         showTemporaryAlert("Falha ao carregar informações do dashboard.", "error");
     }
 }
+
+// Função para carregar conteúdo de uma seção específica
+async function loadSectionContent(sectionId, currentUser) {
+    console.log(`Carregando seção: ${sectionId}`);
+    const dynamicContentArea = document.getElementById('dynamicContentArea');
+    if (!dynamicContentArea) return;
+
+    // Limpa área de conteúdo e mostra um loader simples
+    dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin fa-2x"></i> Carregando ${sectionId}...</div>`;
+    showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500);
+
+    try {
+        if (sectionId === 'produtos' || sectionId === 'produtos-consulta') {
+            const products = await DataService.getProducts();
+            renderProductsList(products, dynamicContentArea, currentUser.role);
+        } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque') {
+            // Recarrega a visualização padrão do dashboard (KPIs, gráficos)
+            await loadDashboardData(currentUser);
+        }
+        // TODO: Adicionar 'else if' para outras seções (registrar-venda, vendas, usuarios, config, etc.)
+        else {
+            dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "${sectionId}" ainda não implementada.</div>`;
+        }
+    } catch (error) {
+        console.error(`Erro ao carregar seção ${sectionId}:`, error);
+        dynamicContentArea.innerHTML = `<div class="p-8 text-center text-red-400">Erro ao carregar conteúdo. Tente novamente.</div>`;
+        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, "error");
+    }
+}
+
+// Função para renderizar a lista de produtos
+function renderProductsList(products, container, userRole) {
+    container.innerHTML = ''; // Limpa o container
+
+    const title = document.createElement('h2');
+    title.className = 'text-xl font-semibold text-slate-100 mb-4';
+    title.textContent = 'Lista de Produtos';
+    container.appendChild(title);
+
+    if (userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') {
+        const addProductButton = document.createElement('button');
+        addProductButton.id = 'openAddProductModalButton';
+        addProductButton.className = 'btn-primary mb-4 inline-flex items-center';
+        addProductButton.innerHTML = '<i class="fas fa-plus mr-2"></i> Adicionar Novo Produto';
+        addProductButton.onclick = () => {
+            // TODO: Implementar abertura de modal para adicionar produto
+            showTemporaryAlert('Abrir modal para adicionar produto (a implementar).', 'info');
+        };
+        container.appendChild(addProductButton);
+    }
+
+    if (!products || products.length === 0) {
+        container.innerHTML += '<p class="text-slate-400">Nenhum produto encontrado.</p>';
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'min-w-full bg-slate-800 shadow-md rounded-lg overflow-hidden';
+    table.innerHTML = `
+        <thead class="bg-slate-700">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Nome</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Categoria</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Preço</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Estoque</th>
+                ${(userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') ? '<th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Ações</th>' : ''}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-700">
+        </tbody>
+    `;
+    const tbody = table.querySelector('tbody');
+    products.forEach(product => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-750 transition-colors duration-150';
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-200">${product.name}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${product.category}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatCurrency(product.price)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm ${product.stock < 20 ? 'text-red-400 font-semibold' : 'text-slate-300'}">${product.stock}</td>
+            ${(userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') ? `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                <button class="text-sky-400 hover:text-sky-300 mr-2" onclick="editProduct('${product.id}')"><i class="fas fa-edit"></i></button>
+                <button class="text-red-500 hover:text-red-400" onclick="deleteProductConfirmation('${product.id}', '${product.name}')"><i class="fas fa-trash"></i></button>
+            </td>` : ''}
+        `;
+        tbody.appendChild(tr);
+    });
+    container.appendChild(table);
+}
+// Placeholder para funções de edição/deleção (a serem implementadas com modais e DataService)
+window.editProduct = (productId) => { showTemporaryAlert(`Editar produto ${productId} (a implementar).`, 'info'); };
+window.deleteProductConfirmation = (productId, productName) => { 
+    // TODO: Implementar modal de confirmação
+    if (confirm(`Tem certeza que deseja excluir o produto "${productName}"?`)) {
+        DataService.deleteProduct(productId)
+            .then(() => {
+                showTemporaryAlert(`Produto "${productName}" excluído.`, 'success');
+                // Recarregar lista de produtos
+                const currentUser = firebase.auth().currentUser;
+                if(currentUser) loadSectionContent('produtos', {uid: currentUser.uid, role: localStorage.getItem('elitecontrol_user_role')});
+            })
+            .catch(err => {
+                console.error("Erro ao excluir produto:", err);
+                showTemporaryAlert(`Erro ao excluir "${productName}".`, 'error');
+            });
+    }
+};
+
 
 // Atualizar KPIs do Dashboard
 function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser) {
@@ -109,63 +262,55 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
     const kpiTitle4 = document.querySelector('#kpiContainer .kpi-card:nth-child(4) .kpi-title');
 
     if (kpiButtonContainer4 && kpiButtonContainer4.firstChild && kpiButtonContainer4.firstChild.nodeName !== 'BUTTON') {
-        kpiButtonContainer4.innerHTML = ''; // Limpa se não for um botão, para recriar
+        kpiButtonContainer4.innerHTML = ''; 
     }
 
     if (currentUser.role === 'Vendedor') {
         if (kpiTitle1) kpiTitle1.textContent = "Minhas Vendas (Hoje)";
-        if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats.todayRevenue); // TODO: Ajustar para vendas DO VENDEDOR
-        
+        if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats.todayRevenue); 
         if (kpiTitle2) kpiTitle2.textContent = "Nº de Vendas (Hoje)";
-        if (kpiValue2) kpiValue2.textContent = salesStats.todaySales; // TODO: Ajustar para vendas DO VENDEDOR
-        
+        if (kpiValue2) kpiValue2.textContent = salesStats.todaySales; 
         if (kpiTitle3) kpiTitle3.textContent = "Produtos Disponíveis";
         if (kpiValue3) kpiValue3.textContent = allProducts ? allProducts.length : 0;
-
         if (kpiTitle4) kpiTitle4.textContent = "Nova Venda";
         if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#newSaleButton')) {
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="newSaleButton">Registrar</button>`;
              const newSaleButton = document.getElementById('newSaleButton');
              if (newSaleButton) newSaleButton.addEventListener('click', () => {
-                showTemporaryAlert('Funcionalidade "Nova Venda" a ser implementada.', 'info');
-                // Aqui abriria um modal ou iria para uma página de registro de venda
+                // TODO: Implementar navegação para seção de registrar venda
+                window.location.hash = '#registrar-venda';
              });
         }
     } else if (currentUser.role === 'Controlador de Estoque') {
         if (kpiTitle1) kpiTitle1.textContent = "Total de Produtos";
         if (kpiValue1) kpiValue1.textContent = productStats.totalProducts;
-
         if (kpiTitle2) kpiTitle2.textContent = "Produtos c/ Estoque Baixo";
         if (kpiValue2) kpiValue2.textContent = productStats.lowStock;
-        
         if (kpiTitle3) kpiTitle3.textContent = "Nº de Categorias";
         if (kpiValue3) kpiValue3.textContent = productStats.categories ? Object.keys(productStats.categories).length : 0;
-
         if (kpiTitle4) kpiTitle4.textContent = "Adicionar Produto";
          if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#newProductButton')) {
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="newProductButton">Adicionar</button>`;
              const newProductButton = document.getElementById('newProductButton');
              if(newProductButton) newProductButton.addEventListener('click', () => {
-                showTemporaryAlert('Funcionalidade "Adicionar Produto" a ser implementada.', 'info');
-                // Aqui abriria um modal ou iria para uma página de cadastro de produto
+                // TODO: Implementar abertura de modal ou navegação para adicionar produto
+                window.location.hash = '#produtos'; // Leva para a lista onde o botão de adicionar estará
              });
         }
     } else if (currentUser.role === 'Dono/Gerente') {
         if (kpiTitle1) kpiTitle1.textContent = "Receita Total (Geral)";
         if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats.totalRevenue);
-
         if (kpiTitle2) kpiTitle2.textContent = "Total de Vendas (Geral)";
         if (kpiValue2) kpiValue2.textContent = salesStats.totalSales;
-
         if (kpiTitle3) kpiTitle3.textContent = "Total de Produtos";
         if (kpiValue3) kpiValue3.textContent = productStats.totalProducts;
-        
         if (kpiTitle4) kpiTitle4.textContent = "Ver Relatórios";
          if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#viewReportsButton')) {
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="viewReportsButton">Detalhes</button>`;
              const viewReportsButton = document.getElementById('viewReportsButton');
              if(viewReportsButton) viewReportsButton.addEventListener('click', () => {
-                showTemporaryAlert('Funcionalidade "Ver Relatórios" a ser implementada.', 'info');
+                // TODO: Implementar navegação para seção de relatórios
+                window.location.hash = '#vendas'; // Exemplo, pode ser uma seção específica de relatórios
              });
         }
     }
@@ -181,23 +326,14 @@ function renderDashboardMainCharts(salesStats, topProductsData) {
         console.warn("Dados para gráficos não disponíveis.");
         return;
     }
-
     const salesCtx = document.getElementById('salesChart').getContext('2d');
-    if (window.salesChartInstance) {
-        window.salesChartInstance.destroy();
-    }
-    // TODO: Processar salesStats para gerar labels e data mais significativos para o gráfico de vendas.
-    // Por enquanto, um exemplo simplificado.
+    if (window.salesChartInstance) window.salesChartInstance.destroy();
     const salesChartRenderData = {
         labels: ['Períodos Anteriores', 'Hoje'], 
         datasets: [{
             label: 'Vendas (R$)',
-            data: [
-                (salesStats.totalRevenue || 0) - (salesStats.todayRevenue || 0), 
-                salesStats.todayRevenue || 0
-            ],
-            backgroundColor: 'rgba(56, 189, 248, 0.2)',
-            borderColor: 'rgba(56, 189, 248, 1)',
+            data: [(salesStats.totalRevenue || 0) - (salesStats.todayRevenue || 0), salesStats.todayRevenue || 0],
+            backgroundColor: 'rgba(56, 189, 248, 0.2)', borderColor: 'rgba(56, 189, 248, 1)',
             borderWidth: 2, tension: 0.4, pointBackgroundColor: 'rgba(56, 189, 248, 1)',
         }]
     };
@@ -211,19 +347,15 @@ function renderDashboardMainCharts(salesStats, topProductsData) {
     }});
     
     const productsCtx = document.getElementById('productsChart').getContext('2d');
-    if (window.productsChartInstance) {
-        window.productsChartInstance.destroy();
-    }
+    if (window.productsChartInstance) window.productsChartInstance.destroy();
     const productChartLabels = topProductsData && topProductsData.length > 0 ? topProductsData.map(p => p.name) : ['Nenhum produto vendido'];
     const productChartDataValues = topProductsData && topProductsData.length > 0 ? topProductsData.map(p => p.count) : [1];
-
     window.productsChartInstance = new Chart(productsCtx, { 
         type: 'doughnut',
         data: {
             labels: productChartLabels, 
             datasets: [{
-                label: 'Quantidade Vendida',
-                data: productChartDataValues, 
+                label: 'Quantidade Vendida', data: productChartDataValues, 
                 backgroundColor: ['rgba(56, 189, 248, 0.8)','rgba(99, 102, 241, 0.8)','rgba(16, 185, 129, 0.8)','rgba(245, 158, 11, 0.8)','rgba(239, 68, 68, 0.8)'],
                 borderColor: ['rgba(56, 189, 248, 1)','rgba(99, 102, 241, 1)','rgba(16, 185, 129, 1)','rgba(245, 158, 11, 1)','rgba(239, 68, 68, 1)'],
                 borderWidth: 2
@@ -244,30 +376,25 @@ function updateRecentActivitiesUI(sales) {
     const activitiesContainer = document.getElementById('recentActivitiesContainer');
     if (!activitiesContainer) return;
     activitiesContainer.innerHTML = ''; 
-
     if (!sales || sales.length === 0) {
         activitiesContainer.innerHTML = '<li class="activity-item"><div class="activity-content"><div class="activity-text text-slate-400">Nenhuma venda recente.</div></div></li>';
         return;
     }
-
     sales.forEach(sale => {
         const activityItem = document.createElement('li');
         activityItem.className = 'activity-item';
-        // Pega os nomes dos produtos da venda
         const productNames = sale.productsDetail && Array.isArray(sale.productsDetail) && sale.productsDetail.length > 0 
             ? sale.productsDetail.map(p => p.name || 'Produto desconhecido').slice(0,2).join(', ') + (sale.productsDetail.length > 2 ? '...' : '')
             : 'Detalhes não disponíveis';
-
         activityItem.innerHTML = `
             <div class="activity-icon"><i class="fas fa-receipt"></i></div>
             <div class="activity-content">
-                <div class="activity-text">Venda registrada: ${productNames} - Total: ${formatCurrency(sale.total)}</div>
+                <div class="activity-text">Venda #${(sale.id || 'N/A').substring(0,6)}: ${productNames} - Total: ${formatCurrency(sale.total)}</div>
                 <div class="activity-time">${formatDate(sale.date)} ${sale.sellerName ? 'por ' + sale.sellerName : ''}</div>
-            </div>`; // Adicionado sellerName
+            </div>`;
         activitiesContainer.appendChild(activityItem);
     });
 }
-
 
 // Funções de Inicialização da UI
 function initializeUI(currentUser) { 
@@ -307,7 +434,7 @@ function clearDashboardUI() {
         const valueEl = card.querySelector('.kpi-value');
         const titleEl = card.querySelector('.kpi-title');
         if (valueEl && !valueEl.querySelector('button')) valueEl.textContent = '0';
-        if (titleEl) { // Redefine títulos para o padrão
+        if (titleEl) { 
             if(index === 0) titleEl.textContent = "Minhas Vendas (Hoje)";
             if(index === 1) titleEl.textContent = "Nº de Vendas (Hoje)";
             if(index === 2) titleEl.textContent = "Produtos Disponíveis";
@@ -315,19 +442,14 @@ function clearDashboardUI() {
         }
     });
     const kpiTodaySalesValue = document.querySelector('#kpiContainer .kpi-card:nth-child(1) .kpi-value');
-    if (kpiTodaySalesValue) kpiTodaySalesValue.textContent = formatCurrency(0); // Formata para R$0,00
-
+    if (kpiTodaySalesValue) kpiTodaySalesValue.textContent = formatCurrency(0); 
     if (window.salesChartInstance) { window.salesChartInstance.destroy(); window.salesChartInstance = null; }
     if (window.productsChartInstance) { window.productsChartInstance.destroy(); window.productsChartInstance = null; }
-    
     const activitiesContainer = document.getElementById('recentActivitiesContainer');
     if(activitiesContainer) activitiesContainer.innerHTML = '<li class="activity-item"><div class="activity-content"><div class="activity-text text-slate-400">Nenhuma atividade recente.</div></div></li>';
-
     sessionStorage.removeItem('welcomeAlertShown');
 }
 
-
-// Atualizar Informações do Usuário na UI
 function updateUserInfo(user) { 
     if (!user) return;
     const userInitialsEl = document.getElementById('userInitials');
@@ -361,12 +483,38 @@ function updateUserInfo(user) {
     }
 }
 
-// Configurar Event Listeners
 function setupEventListeners() {
     const loginForm = document.getElementById('loginForm');
     if (loginForm) loginForm.addEventListener('submit', handleLogin);
     const logoutButton = document.getElementById('logoutButton');
     if (logoutButton) logoutButton.addEventListener('click', handleLogout);
+    
+    // Listener para links da Sidebar e hashchange
+    window.addEventListener('hashchange', () => {
+        const currentUser = firebase.auth().currentUser;
+        if (currentUser && localStorage.getItem('elitecontrol_user_role')) {
+            const section = window.location.hash.substring(1);
+            if (section) {
+                 loadSectionContent(section, {uid: currentUser.uid, email: currentUser.email, role: localStorage.getItem('elitecontrol_user_role')});
+            } else {
+                // Se o hash for removido ou for '#', carrega o dashboard padrão
+                loadDashboardData({uid: currentUser.uid, email: currentUser.email, role: localStorage.getItem('elitecontrol_user_role')});
+            }
+        }
+    });
+    // Listener para cliques diretos nos links da sidebar (atualiza o hash)
+    document.addEventListener('click', function(e) {
+        const navLink = e.target.closest('#navLinks a.nav-link');
+        if (navLink) {
+            e.preventDefault();
+            document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
+            navLink.classList.add('active');
+            const section = navLink.dataset.section;
+            window.location.hash = section; // Isso vai disparar o 'hashchange' listener
+        }
+    });
+
+
     const notificationBellButton = document.getElementById('notificationBellButton');
     const notificationDropdown = document.getElementById('notificationDropdown');
     if (notificationBellButton && notificationDropdown) {
@@ -389,20 +537,8 @@ function setupEventListeners() {
             }
         });
     }
-     document.addEventListener('click', function(e) {
-        const navLink = e.target.closest('#navLinks a.nav-link');
-        if (navLink) {
-            e.preventDefault();
-            document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
-            navLink.classList.add('active');
-            showTemporaryAlert(`Navegando para: ${navLink.querySelector('span').textContent}`, 'info');
-            // loadSectionContent(navLink.dataset.section); // Futura implementação
-        }
-    });
-    // Listeners para botões de KPI são adicionados em updateDashboardKPIs
 }
 
-// Manipulador de Login
 async function handleLogin(e) {
     e.preventDefault();
     const email = document.getElementById('email').value;
@@ -427,17 +563,16 @@ async function handleLogin(e) {
     }
 }
 
-// Mostrar Erro de Login
 function showLoginError(message) {
     const errorElement = document.getElementById('loginErrorMessage');
     if (errorElement) { errorElement.textContent = message; errorElement.classList.toggle('hidden', !message); }
 }
 
-// Manipulador de Logout
 async function handleLogout() {
     try {
         await firebase.auth().signOut();
         sessionStorage.removeItem('welcomeAlertShown'); 
+        window.location.hash = ''; // Limpa o hash na URL ao deslogar
         console.log("Logout realizado com sucesso.");
     } catch (error) {
         console.error("Erro ao fazer logout:", error);
@@ -445,7 +580,6 @@ async function handleLogout() {
     }
 }
 
-// Funções de Notificação (mantidas como estão, usando localStorage por enquanto)
 function initializeNotifications() {
     if (!document.getElementById('notificationCountBadge')) return;
     let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]');
@@ -472,7 +606,7 @@ function updateNotificationsUI() {
             if (n.type === 'warning') badgeClass = 'warning';
             else if (n.type === 'error') badgeClass = 'error';
             else if (n.type === 'success') badgeClass = 'success';
-            const item = document.createElement('div'); // Criar o elemento aqui para adicionar o listener
+            const item = document.createElement('div'); 
             item.className = `notification-item ${n.read ? '' : 'unread'}`;
             item.dataset.id = n.id;
             item.innerHTML = `
@@ -485,8 +619,8 @@ function updateNotificationsUI() {
                     <div class="notification-item-time">${n.time}</div>
                     ${!n.read ? '<div class="notification-item-action">Marcar como lida</div>' : ''}
                 </div>`;
-            item.addEventListener('click', () => markNotificationAsRead(n.id)); // Adiciona listener aqui
-            return item.outerHTML; // Retorna o HTML do elemento
+            item.addEventListener('click', () => markNotificationAsRead(n.id)); 
+            return item.outerHTML; 
         }).join('');
 }
 function markNotificationAsRead(id) {
@@ -504,7 +638,6 @@ function markAllNotificationsAsRead() {
     if (dropdown) dropdown.classList.add('hidden');
 }
 
-// Inicializar Sidebar
 function initializeSidebar(role) { 
     if (!document.getElementById('navLinks') || !role) return;
     let links = [];
@@ -513,10 +646,16 @@ function initializeSidebar(role) {
     else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: true, section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', section: 'clientes' }, { icon: 'fa-cog', text: 'Configurações', section: 'config' } ];
     else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); }
     const navLinksContainer = document.getElementById('navLinks');
-    navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join('');
+    navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active && (!window.location.hash || window.location.hash === '#' || window.location.hash === `#${link.section}`) ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join('');
+    // Ativa o link correto com base no hash da URL ao carregar
+    const currentHash = window.location.hash.substring(1);
+    if (currentHash) {
+        document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
+        const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${currentHash}"]`);
+        if (activeLink) activeLink.classList.add('active');
+    }
 }
 
-// Mostrar Alerta Temporário
 function showTemporaryAlert(message, type = 'info', duration = 4000) {
     const container = document.getElementById('temporaryAlertsContainer');
     if (!container) return;
@@ -528,36 +667,26 @@ function showTemporaryAlert(message, type = 'info', duration = 4000) {
     setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration);
 }
 
-// Funções de Utilidade
 function formatCurrency(value) {
-    if (typeof value !== 'number' || isNaN(value)) value = 0; // Garante que é um número válido
+    if (typeof value !== 'number' || isNaN(value)) value = 0;
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
-function formatDate(dateInput) { // Aceita string, timestamp do Firebase ou objeto Date
+function formatDate(dateInput) { 
     let date;
-    if (dateInput instanceof Date) {
-        date = dateInput;
-    } else if (dateInput && typeof dateInput.toDate === 'function') { // Firebase Timestamp
-        date = dateInput.toDate();
-    } else if (typeof dateInput === 'string' || typeof dateInput === 'number') {
-        date = new Date(dateInput);
-    } else {
-        date = new Date(); // Fallback para data atual se entrada inválida
-    }
-    if (isNaN(date.getTime())) return "Data inválida"; // Verifica se a data é válida
-    return new Intl.DateTimeFormat('pt-BR').format(date);
+    if (dateInput instanceof Date) date = dateInput;
+    else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate();
+    else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput);
+    else date = new Date(); 
+    if (isNaN(date.getTime())) return "Data inválida"; 
+    return new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric'}).format(date);
 }
 function formatDateTime(dateInput) {
     let date;
-    if (dateInput instanceof Date) {
-        date = dateInput;
-    } else if (dateInput && typeof dateInput.toDate === 'function') { // Firebase Timestamp
-        date = dateInput.toDate();
-    } else if (typeof dateInput === 'string' || typeof dateInput === 'number') {
-        date = new Date(dateInput);
-    } else {
-        date = new Date(); 
-    }
+    if (dateInput instanceof Date) date = dateInput;
+    else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate();
+    else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput);
+    else date = new Date(); 
      if (isNaN(date.getTime())) return "Data/hora inválida";
     return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
+
