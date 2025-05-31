@@ -1,5 +1,8 @@
 // js/firebase-service.js
-// Versão com ajustes para tipo de 'total' e inclusão de 'sellerName'
+// Serviço para interagir com o Firebase Firestore
+
+// Certifique-se de que 'db' e 'firebase' (para FieldValue e Timestamp) estão acessíveis.
+// Eles são inicializados em firebase-config.js e estão no escopo global.
 
 const DataService = {
     // --- Funções de Usuário ---
@@ -15,6 +18,16 @@ const DataService = {
                 return { uid: userId, ...userDoc.data() };
             } else {
                 console.warn(`Documento do usuário não encontrado pelo UID: ${userId} na coleção 'users'.`);
+                // Tenta buscar pelo email como fallback (se o UID não for o ID do documento)
+                // Isso pode ser útil em cenários de migração.
+                if(firebase.auth().currentUser && firebase.auth().currentUser.email){
+                    const emailQuerySnapshot = await db.collection('users').where('email', '==', firebase.auth().currentUser.email).limit(1).get();
+                    if(!emailQuerySnapshot.empty){
+                        const doc = emailQuerySnapshot.docs[0];
+                         console.warn(`Usuário encontrado pelo email ${firebase.auth().currentUser.email} com ID de documento ${doc.id} em vez de UID ${userId}`);
+                        return { uid: userId, email: firebase.auth().currentUser.email, ...doc.data()};
+                    }
+                }
                 return null;
             }
         } catch (error) {
@@ -27,7 +40,7 @@ const DataService = {
     getProducts: async function() {
         if (!db) throw new Error("Firestore não inicializado");
         try {
-            const snapshot = await db.collection('products').get();
+            const snapshot = await db.collection('products').orderBy('name').get(); // Ordena por nome
             const products = [];
             snapshot.forEach(doc => {
                 products.push({ id: doc.id, ...doc.data() });
@@ -40,12 +53,29 @@ const DataService = {
         }
     },
 
+    getProductById: async function(productId) {
+        if (!db) throw new Error("Firestore não inicializado");
+        try {
+            const docRef = db.collection('products').doc(productId);
+            const docSnap = await docRef.get();
+            if (docSnap.exists()) {
+                console.log("Produto encontrado por ID:", productId, docSnap.data());
+                return { id: docSnap.id, ...docSnap.data() };
+            } else {
+                console.warn("Nenhum produto encontrado com o ID:", productId);
+                return null;
+            }
+        } catch (error) {
+            console.error("Erro ao buscar produto por ID:", error);
+            throw error;
+        }
+    },
+
     addProduct: async function(productData) {
         if (!db) throw new Error("Firestore não inicializado");
         try {
             productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
             productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-            // Garante que price e stock sejam números
             productData.price = Number(productData.price) || 0;
             productData.stock = Number(productData.stock) || 0;
             const docRef = await db.collection('products').add(productData);
@@ -95,9 +125,8 @@ const DataService = {
                 sales.push({ 
                     id: doc.id, 
                     ...data,
-                    // Garante que 'total' seja número ao ler
                     total: Number(data.total) || 0, 
-                    date: data.date.toDate ? data.date.toDate().toISOString().split('T')[0] : data.date 
+                    date: data.date // Mantém como Timestamp para formatação posterior
                 });
             });
             console.log("Vendas buscadas:", sales);
@@ -108,29 +137,29 @@ const DataService = {
         }
     },
 
-    addSale: async function(saleData, productsSold, sellerName) { // Adicionado sellerName como parâmetro
+    addSale: async function(saleData, productsSoldDetails, sellerName) {
         if (!db) throw new Error("Firestore não inicializado");
         
         const batch = db.batch();
         try {
             const saleDocRef = db.collection('sales').doc();
-            const calculatedTotal = productsSold.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+            const calculatedTotal = productsSoldDetails.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
             
             const salePayload = {
-                // ...saleData, // Cuidado para não sobrescrever o 'total' ou 'date' com formato errado
                 date: firebase.firestore.Timestamp.fromDate(new Date(saleData.dateString)), 
                 sellerId: firebase.auth().currentUser.uid,
-                sellerName: sellerName || "Vendedor Desconhecido", // Adiciona sellerName
-                productsDetail: productsSold.map(p => ({ // Garante que quantity e unitPrice sejam números
-                    ...p,
+                sellerName: sellerName || "Vendedor Desconhecido",
+                productsDetail: productsSoldDetails.map(p => ({
+                    productId: p.productId,
+                    name: p.name,
                     quantity: Number(p.quantity) || 0,
                     unitPrice: Number(p.unitPrice) || 0
                 })), 
-                total: calculatedTotal // Salva como Number
+                total: calculatedTotal 
             };
             batch.set(saleDocRef, salePayload);
 
-            for (const item of productsSold) {
+            for (const item of productsSoldDetails) {
                 if (!item.productId || typeof (Number(item.quantity)) !== 'number' || Number(item.quantity) <= 0) {
                     throw new Error(`Dados inválidos para o produto na venda: ${item.name || 'ID desconhecido'}`);
                 }
@@ -181,19 +210,21 @@ const DataService = {
             const salesSnapshot = await db.collection('sales').get();
             stats.totalSales = salesSnapshot.size;
 
-            const today = new Date();
-            const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            // const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1); // Correção: endOfToday deve ser o início do dia seguinte
+            const todayDate = new Date();
+            const startOfToday = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
+            const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000); // Início do dia seguinte
 
             salesSnapshot.forEach(doc => {
                 const sale = doc.data();
-                const saleTotalNumber = Number(sale.total) || 0; // Garante que é número
+                const saleTotalNumber = Number(sale.total) || 0;
                 stats.totalRevenue += saleTotalNumber;
                 
-                const saleDate = sale.date.toDate ? sale.date.toDate() : new Date(sale.date);
-                if (saleDate >= startOfToday && saleDate < new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000) ) { // Verifica se a venda é de hoje
-                    stats.todaySales++;
-                    stats.todayRevenue += saleTotalNumber;
+                if (sale.date && typeof sale.date.toDate === 'function') { // Verifica se é um Timestamp
+                    const saleDate = sale.date.toDate();
+                    if (saleDate >= startOfToday && saleDate < endOfToday) {
+                        stats.todaySales++;
+                        stats.todayRevenue += saleTotalNumber;
+                    }
                 }
             });
             console.log("Estatísticas de vendas:", stats);
@@ -215,7 +246,7 @@ const DataService = {
                 if (sale.productsDetail && Array.isArray(sale.productsDetail)) {
                     sale.productsDetail.forEach(item => {
                         if (item.productId) {
-                            const productName = item.name || item.productId;
+                            const productName = item.name || item.productId; // Usa o nome do produto se disponível
                             productCounts[productName] = (productCounts[productName] || 0) + (Number(item.quantity) || 0);
                         }
                     });
