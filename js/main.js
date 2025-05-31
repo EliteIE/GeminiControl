@@ -1,7 +1,7 @@
 // js/main.js - Com Modal de Produtos, Carregamento de Seções e Dashboard Dinâmico
 
-// Variáveis globais para o modal de produto (garantir que sejam declaradas antes de DOMContentLoaded se usadas fora)
-let productModal, productForm, productModalTitle, productIdField, productNameField, productCategoryField, productPriceField, productStockField, closeProductModalButton, cancelProductFormButton;
+// Variáveis globais para o modal de produto
+let productModal, productForm, productModalTitle, productIdField, productNameField, productCategoryField, productPriceField, productStockField, closeProductModalButton, cancelProductFormButton, saveProductButton;
 
 // Configurações e Inicialização
 document.addEventListener('DOMContentLoaded', function() {
@@ -16,8 +16,9 @@ document.addEventListener('DOMContentLoaded', function() {
     productStockField = document.getElementById('productStock');
     closeProductModalButton = document.getElementById('closeProductModalButton');
     cancelProductFormButton = document.getElementById('cancelProductFormButton');
+    saveProductButton = document.getElementById('saveProductButton');
 
-    setupEventListeners();
+    setupEventListeners(); // Configura todos os listeners, incluindo os do modal
     
     firebase.auth().onAuthStateChanged(async (user) => {
         if (user) {
@@ -30,34 +31,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log("userDataFromService.role encontrado:", userDataFromService.role);
                     localStorage.setItem('elitecontrol_user_role', userDataFromService.role); 
                     
-                    const currentUser = { 
-                        uid: user.uid, 
-                        email: user.email, 
-                        ...userDataFromService 
-                    };
+                    const currentUser = { uid: user.uid, email: user.email, ...userDataFromService };
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
-                    // Ajuste para o caminho base no GitHub Pages
-                    const basePath = (window.location.hostname === "eliteie.github.io") ? "/GeminiControl/" : "/";
-                    const isIndexPage = currentPath.endsWith('index.html') || currentPath === basePath || currentPath === basePath + "index.html";
+                    const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1") ? "/GeminiControl/" : "/";
+                    const isIndexPage = currentPath.endsWith('index.html') || currentPath === basePath || currentPath === (basePath + "index.html");
                     const isDashboardPage = currentPath.includes('dashboard.html');
 
                     if (isIndexPage) {
                         console.log("Redirecionando para dashboard.html...");
-                        window.location.href = 'dashboard.html';
+                        window.location.href = 'dashboard.html' + (window.location.hash || ''); // Mantém o hash se existir
                     } else if (isDashboardPage) {
                         console.log("Já está no dashboard, verificando hash da URL...");
                         const section = window.location.hash.substring(1);
                         const defaultSection = currentUser.role === 'Vendedor' ? 'vendas-painel' : (currentUser.role === 'Controlador de Estoque' ? 'estoque' : 'geral');
                         
-                        if (section && section !== "#" && section !== defaultSection) {
-                            await loadSectionContent(section, currentUser);
-                        } else {
-                            // Se não houver hash ou for a seção padrão do perfil, carrega o dashboard
-                            window.location.hash = defaultSection; // Garante que o hash reflita a seção padrão
-                            await loadDashboardData(currentUser); 
-                        }
+                        // Carrega a seção do hash ou a seção padrão do perfil
+                        await loadSectionContent(section || defaultSection, currentUser);
+                        // Atualiza o estado ativo da sidebar com base na seção carregada
+                        updateSidebarActiveState(section || defaultSection);
                     }
                 } else {
                     console.error("FALHA NA VERIFICAÇÃO: userDataFromService não existe ou userDataFromService.role está indefinido/falsy.");
@@ -77,9 +70,8 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Nenhum usuário logado (onAuthStateChanged).");
             localStorage.removeItem('elitecontrol_user_role');
             if (document.getElementById('userInitials')) clearDashboardUI();
-
-            const basePath = (window.location.hostname === "eliteie.github.io") ? "/GeminiControl/" : "/";
-            const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === basePath || window.location.pathname === basePath + "index.html";
+            const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1") ? "/GeminiControl/" : "/";
+            const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === basePath || window.location.pathname === (basePath + "index.html");
             if (!isIndexPage) {
                  console.log("Redirecionando para index.html pois não está logado e não está na index.");
                 window.location.href = 'index.html'; 
@@ -91,9 +83,11 @@ document.addEventListener('DOMContentLoaded', function() {
 // --- Funções do Modal de Produto ---
 function openProductModal(product = null) {
     if (!productModal || !productForm || !productModalTitle || !productIdField || !productNameField || !productCategoryField || !productPriceField || !productStockField) {
-        console.error("Elementos do modal de produto não encontrados no DOM.");
+        console.error("Elementos do modal de produto não encontrados no DOM ao tentar abrir.");
+        showTemporaryAlert("Erro ao abrir formulário de produto. Tente recarregar a página.", "error");
         return;
     }
+    console.log("Abrindo modal de produto. Produto para editar:", product);
     productForm.reset(); 
     if (product) { 
         productModalTitle.textContent = 'Editar Produto';
@@ -110,38 +104,42 @@ function openProductModal(product = null) {
 }
 
 function closeProductModal() {
-    if (productModal) productModal.classList.add('hidden');
+    if (productModal) {
+        productModal.classList.add('hidden');
+        console.log("Modal de produto fechado.");
+    }
 }
 
 async function handleProductFormSubmit(event) {
     event.preventDefault();
-    if (!productNameField || !productCategoryField || !productPriceField || !productStockField || !productIdField) {
-        console.error("Campos do formulário de produto não encontrados.");
+    console.log("Tentando salvar produto...");
+    if (!productNameField || !productCategoryField || !productPriceField || !productStockField || !productIdField || !saveProductButton) {
+        console.error("Campos do formulário de produto ou botão de salvar não encontrados durante o submit.");
         return;
     }
     const id = productIdField.value;
     const productData = {
-        name: productNameField.value,
-        category: productCategoryField.value,
+        name: productNameField.value.trim(),
+        category: productCategoryField.value.trim(),
         price: parseFloat(productPriceField.value),
         stock: parseInt(productStockField.value)
     };
 
-    if (!productData.name || !productData.category || isNaN(productData.price) || isNaN(productData.stock)) {
-        showTemporaryAlert("Por favor, preencha todos os campos corretamente.", "warning");
+    if (!productData.name || !productData.category || isNaN(productData.price) || productData.price < 0 || isNaN(productData.stock) || productData.stock < 0) {
+        showTemporaryAlert("Por favor, preencha todos os campos com valores válidos.", "warning");
         return;
     }
 
-    const saveButton = document.getElementById('saveProductButton');
-    if (!saveButton) return;
-    saveButton.disabled = true;
-    saveButton.textContent = 'Salvando...';
+    saveProductButton.disabled = true;
+    saveProductButton.textContent = 'Salvando...';
 
     try {
         if (id) { 
+            console.log("Atualizando produto ID:", id, "com dados:", productData);
             await DataService.updateProduct(id, productData);
             showTemporaryAlert('Produto atualizado com sucesso!', 'success');
         } else { 
+            console.log("Adicionando novo produto com dados:", productData);
             await DataService.addProduct(productData);
             showTemporaryAlert('Produto adicionado com sucesso!', 'success');
         }
@@ -149,31 +147,30 @@ async function handleProductFormSubmit(event) {
         const currentUser = firebase.auth().currentUser;
         if (currentUser) {
             const userRole = localStorage.getItem('elitecontrol_user_role');
-            // Garante que está recarregando a seção de produtos
-            if(window.location.hash === "#produtos" || window.location.hash === "#produtos-consulta"){
-                loadSectionContent(window.location.hash.substring(1), {uid: currentUser.uid, email: currentUser.email, role: userRole });
-            } else { // Se não estiver na seção de produtos, força o hash e recarrega
-                window.location.hash = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
+            const currentSection = window.location.hash.substring(1);
+            const productSection = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
+            
+            if(currentSection === productSection){ // Recarrega apenas se já estiver na seção de produtos
+                loadSectionContent(productSection, {uid: currentUser.uid, email: currentUser.email, role: userRole });
+            } else { // Caso contrário, apenas fecha o modal, o usuário pode querer continuar na seção atual
+                 console.log("Produto salvo, mas não recarregando a lista pois não está na seção de produtos.");
             }
         }
     } catch (error) {
         console.error("Erro ao salvar produto:", error);
         showTemporaryAlert('Erro ao salvar produto. Tente novamente.', 'error');
     } finally {
-        saveButton.disabled = false;
-        saveButton.textContent = 'Salvar Produto';
+        saveProductButton.disabled = false;
+        saveProductButton.textContent = 'Salvar Produto';
     }
 }
 
 // Função para carregar e exibir dados dinâmicos no dashboard (KPIs, gráficos)
 async function loadDashboardData(currentUser) {
-    if (!currentUser || !DataService) {
-        console.warn("loadDashboardData: currentUser ou DataService não disponível.");
-        return; 
-    }
+    // ... (manter esta função como na versão main_js_section_loading)
+    if (!currentUser || !DataService) { console.warn("loadDashboardData: currentUser ou DataService não disponível."); return; }
     const dynamicContentArea = document.getElementById('dynamicContentArea');
-    if (!dynamicContentArea) { console.error("dynamicContentArea não encontrado"); return;}
-
+    if (!dynamicContentArea) { console.error("dynamicContentArea não encontrado"); return; }
     dynamicContentArea.innerHTML = `
         <div id="kpiContainer" class="kpi-container">
             <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-dollar-sign kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Receita Total (Geral)</div><div class="kpi-value">R$ 0,00</div></div></div>
@@ -191,7 +188,6 @@ async function loadDashboardData(currentUser) {
     if (salesChartOptionsButton) salesChartOptionsButton.addEventListener('click', () => showTemporaryAlert('Opções do gráfico de vendas', 'info'));
     const productsChartOptionsButton = document.getElementById('productsChartOptionsButton');
     if (productsChartOptionsButton) productsChartOptionsButton.addEventListener('click', () => showTemporaryAlert('Opções do gráfico de produtos', 'info'));
-
     try {
         showTemporaryAlert("Carregando dados do dashboard...", "info", 2000);
         const [productStats, salesStats, topProductsData, allProducts, recentSalesData] = await Promise.all([
@@ -210,13 +206,12 @@ async function loadDashboardData(currentUser) {
 
 // Função para carregar conteúdo de uma seção específica
 async function loadSectionContent(sectionId, currentUser) {
+    // ... (manter esta função como na versão main_js_section_loading, mas garantir que currentUser.role seja passado para renderProductsList)
     console.log(`Carregando seção: ${sectionId} para usuário:`, currentUser);
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) {console.error("dynamicContentArea não encontrado em loadSectionContent"); return;}
-
     dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin fa-2x"></i> Carregando ${sectionId}...</div>`;
     showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500);
-
     try {
         if (sectionId === 'produtos' || sectionId === 'produtos-consulta') {
             const products = await DataService.getProducts();
@@ -224,13 +219,11 @@ async function loadSectionContent(sectionId, currentUser) {
         } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque' || !sectionId) { 
             await loadDashboardData(currentUser);
         } else if (sectionId === 'registrar-venda') {
-            // TODO: Implementar renderização da tela de registrar venda
-            dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "Registrar Venda" a ser implementada.</div>`;
+            renderRegisterSaleForm(dynamicContentArea, currentUser); // Nova função para registrar venda
         } else if (sectionId === 'vendas') {
-            // TODO: Implementar renderização da tela de histórico/relatório de vendas
-            dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "Vendas (Hist/Rel)" a ser implementada.</div>`;
+            const sales = await DataService.getSales();
+            renderSalesList(sales, dynamicContentArea, currentUser.role); // Nova função para listar vendas
         }
-        // Adicionar mais 'else if' para outras seções conforme necessário
         else {
             dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "${sectionId}" ainda não implementada.</div>`;
         }
@@ -243,21 +236,20 @@ async function loadSectionContent(sectionId, currentUser) {
 
 // Função para renderizar a lista de produtos
 function renderProductsList(products, container, userRole) {
+    // ... (manter esta função como na versão main_js_section_loading)
     if (!container) { console.error("Container da lista de produtos não encontrado."); return; }
     container.innerHTML = ''; 
     const title = document.createElement('h2');
     title.className = 'text-xl font-semibold text-slate-100 mb-4';
     title.textContent = 'Lista de Produtos';
     container.appendChild(title);
-
     if (userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') {
         const addProductButton = document.createElement('button');
         addProductButton.id = 'openAddProductModalButton'; 
         addProductButton.className = 'btn-primary mb-4 inline-flex items-center';
         addProductButton.innerHTML = '<i class="fas fa-plus mr-2"></i> Adicionar Novo Produto';
-        container.appendChild(addProductButton); // O listener é delegado em setupEventListeners
+        container.appendChild(addProductButton); 
     }
-
     if (!products || products.length === 0) {
         const noProductsP = document.createElement('p');
         noProductsP.className = 'text-slate-400';
@@ -265,7 +257,6 @@ function renderProductsList(products, container, userRole) {
         container.appendChild(noProductsP);
         return;
     }
-
     const table = document.createElement('table');
     table.className = 'min-w-full bg-slate-800 shadow-md rounded-lg overflow-hidden';
     table.innerHTML = `
@@ -297,7 +288,7 @@ function renderProductsList(products, container, userRole) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-200">${product.name}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${product.category}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatCurrency(product.price)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm ${product.stock < 20 ? 'text-red-400 font-semibold' : 'text-slate-300'}">${product.stock}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm ${Number(product.stock) < 20 ? 'text-red-400 font-semibold' : 'text-slate-300'}">${product.stock}</td>
             ${actionsHtml}
         `;
         tbody.appendChild(tr);
@@ -305,11 +296,11 @@ function renderProductsList(products, container, userRole) {
     container.appendChild(table);
 }
 
+// Funções globais para botões de ação da tabela (os listeners serão delegados)
 window.handleEditProduct = async (productId) => { 
     console.log("Tentando editar produto com ID:", productId);
     try {
-        // Esta função agora busca o produto diretamente do DataService
-        const productToEdit = await DataService.getProductById(productId); // Supondo que você implementará getProductById
+        const productToEdit = await DataService.getProductById(productId);
         if (productToEdit) {
             openProductModal(productToEdit);
         } else {
@@ -321,30 +312,93 @@ window.handleEditProduct = async (productId) => {
     }
 };
 window.handleDeleteProductConfirmation = (productId, productName) => { 
-    if (confirm(`Tem certeza que deseja excluir o produto "${productName}"? Esta ação não pode ser desfeita.`)) {
-        DataService.deleteProduct(productId)
-            .then(() => {
-                showTemporaryAlert(`Produto "${productName}" excluído com sucesso.`, 'success');
-                const currentUser = firebase.auth().currentUser;
-                if(currentUser) {
-                    const userRole = localStorage.getItem('elitecontrol_user_role');
-                     // Garante que está recarregando a seção de produtos
-                    if(window.location.hash === "#produtos" || window.location.hash === "#produtos-consulta"){
-                        loadSectionContent(window.location.hash.substring(1), {uid: currentUser.uid, email: currentUser.email, role: userRole });
-                    } else { 
-                        window.location.hash = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
-                    }
+    // Usar um modal customizado em vez de confirm()
+    showCustomConfirm(`Tem certeza que deseja excluir o produto "${productName}"? Esta ação não pode ser desfeita.`, async () => {
+        try {
+            await DataService.deleteProduct(productId);
+            showTemporaryAlert(`Produto "${productName}" excluído com sucesso.`, 'success');
+            const currentUser = firebase.auth().currentUser;
+            if (currentUser) {
+                const userRole = localStorage.getItem('elitecontrol_user_role');
+                const currentSection = window.location.hash.substring(1);
+                const productSection = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
+                if (currentSection === productSection) {
+                    loadSectionContent(productSection, { uid: currentUser.uid, email: currentUser.email, role: userRole });
                 }
-            })
-            .catch(err => {
-                console.error("Erro ao excluir produto:", err);
-                showTemporaryAlert(`Erro ao excluir o produto "${productName}".`, 'error');
-            });
-    }
+            }
+        } catch (err) {
+            console.error("Erro ao excluir produto:", err);
+            showTemporaryAlert(`Erro ao excluir o produto "${productName}".`, 'error');
+        }
+    });
 };
+
+// Placeholder para as novas funções de renderização de seções
+function renderRegisterSaleForm(container, currentUser) {
+    container.innerHTML = `<div class="p-8"><h2 class="text-xl font-semibold text-slate-100 mb-4">Registrar Nova Venda</h2><p class="text-slate-400">Formulário de registro de venda será implementado aqui.</p></div>`;
+    // TODO: Implementar formulário e lógica de registro de venda
+}
+
+function renderSalesList(sales, container, userRole) {
+    container.innerHTML = '';
+    const title = document.createElement('h2');
+    title.className = 'text-xl font-semibold text-slate-100 mb-4';
+    title.textContent = 'Histórico de Vendas';
+    container.appendChild(title);
+
+    if (!sales || sales.length === 0) {
+        container.innerHTML += '<p class="text-slate-400">Nenhuma venda encontrada.</p>';
+        return;
+    }
+    const table = document.createElement('table');
+    table.className = 'min-w-full bg-slate-800 shadow-md rounded-lg overflow-hidden';
+    table.innerHTML = `
+        <thead class="bg-slate-700">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Data</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Produtos</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Total</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Vendedor</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-700">
+        </tbody>
+    `;
+    const tbody = table.querySelector('tbody');
+    sales.forEach(sale => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-750 transition-colors duration-150';
+        const productNames = sale.productsDetail && Array.isArray(sale.productsDetail) && sale.productsDetail.length > 0 
+            ? sale.productsDetail.map(p => `${p.name} (x${p.quantity})`).join(', ')
+            : 'N/A';
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatDate(sale.date)}</td>
+            <td class="px-6 py-4 text-sm text-slate-200">${productNames}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatCurrency(sale.total)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${sale.sellerName || sale.sellerId.substring(0,10)+'...'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    container.appendChild(table);
+}
+
+
+// --- Funções de UI e Utilitários (manter as versões mais recentes) ---
+// updateDashboardKPIs, renderDashboardMainCharts, updateRecentActivitiesUI, 
+// initializeUI, clearDashboardUI, updateUserInfo, setupEventListeners, 
+// handleLogin, showLoginError, handleLogout, notifications, initializeSidebar,
+// showTemporaryAlert, formatCurrency, formatDate, formatDateTime
+
+// ... (Cole aqui as versões mais recentes dessas funções que já estavam funcionando,
+//     especialmente `updateDashboardKPIs`, `renderDashboardMainCharts`, `updateRecentActivitiesUI`,
+//     `initializeUI`, `clearDashboardUI`, `updateUserInfo`, `handleLogin`, `showLoginError`, 
+//     `handleLogout`, as funções de notificação, `initializeSidebar`, `showTemporaryAlert`,
+//     e as funções de formatação de data/moeda. A função `setupEventListeners` abaixo
+//     é uma versão atualizada para incluir os listeners do modal.)
 
 // Atualizar KPIs do Dashboard
 function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser) {
+    // ... (código da versão main_js_section_loading) ...
     console.log("Atualizando KPIs para:", currentUser.role);
     const kpiValue1 = document.querySelector('#kpiContainer .kpi-card:nth-child(1) .kpi-value');
     const kpiTitle1 = document.querySelector('#kpiContainer .kpi-card:nth-child(1) .kpi-title');
@@ -384,10 +438,7 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
         if (kpiTitle4) kpiTitle4.textContent = "Adicionar Produto";
          if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#addProductFromKPIButton')) { 
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="addProductFromKPIButton">Adicionar</button>`;
-             const addProductKPIButton = document.getElementById('addProductFromKPIButton');
-             if(addProductKPIButton) addProductKPIButton.addEventListener('click', () => {
-                openProductModal(); 
-             });
+             // O listener para #addProductFromKPIButton é adicionado em setupEventListeners via delegação
         }
     } else if (currentUser.role === 'Dono/Gerente') {
         if (kpiTitle1) kpiTitle1.textContent = "Receita Total (Geral)";
@@ -409,8 +460,9 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
 
 // Função para renderizar gráficos do dashboard com dados dinâmicos
 function renderDashboardMainCharts(salesStats, topProductsData) {
-    if (!document.getElementById('salesChart') || typeof Chart === 'undefined') { return; }
-    if (!salesStats || !topProductsData) { return; }
+    // ... (código da versão main_js_section_loading) ...
+    if (!document.getElementById('salesChart') || typeof Chart === 'undefined') { console.warn("Elemento do gráfico 'salesChart' ou Chart.js não disponível."); return; }
+    if (!salesStats || !topProductsData) { console.warn("Dados para gráficos não disponíveis."); return; }
     const salesCtx = document.getElementById('salesChart').getContext('2d');
     if (window.salesChartInstance) window.salesChartInstance.destroy();
     const salesChartRenderData = {
@@ -430,7 +482,6 @@ function renderDashboardMainCharts(salesStats, topProductsData) {
                 x: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: 'rgba(241, 245, 249, 0.8)' } }
             }
     }});
-    
     const productsCtx = document.getElementById('productsChart').getContext('2d');
     if (window.productsChartInstance) window.productsChartInstance.destroy();
     const productChartLabels = topProductsData && topProductsData.length > 0 ? topProductsData.map(p => p.name) : ['Nenhum produto vendido'];
@@ -458,6 +509,7 @@ function renderDashboardMainCharts(salesStats, topProductsData) {
 
 // Atualizar UI de Atividades Recentes
 function updateRecentActivitiesUI(sales) {
+    // ... (código da versão main_js_section_loading) ...
     const activitiesContainer = document.getElementById('recentActivitiesContainer');
     if (!activitiesContainer) return;
     activitiesContainer.innerHTML = ''; 
@@ -483,6 +535,7 @@ function updateRecentActivitiesUI(sales) {
 
 // Funções de Inicialização da UI
 function initializeUI(currentUser) { 
+    // ... (código da versão main_js_section_loading) ...
     if (!currentUser) return; 
     updateUserInfo(currentUser);
     initializeNotifications();
@@ -496,6 +549,7 @@ function initializeUI(currentUser) {
 }
 
 function clearDashboardUI() {
+    // ... (código da versão main_js_section_loading) ...
     const userInitials = document.getElementById('userInitials');
     if (userInitials) userInitials.textContent = 'U';
     const userDropdownInitials = document.getElementById('userDropdownInitials');
@@ -536,6 +590,7 @@ function clearDashboardUI() {
 }
 
 function updateUserInfo(user) { 
+    // ... (código da versão main_js_section_loading) ...
     if (!user) return;
     const userInitialsEl = document.getElementById('userInitials');
     const userDropdownInitialsEl = document.getElementById('userDropdownInitials');
@@ -576,28 +631,23 @@ function setupEventListeners() {
     
     window.addEventListener('hashchange', () => {
         const currentUser = firebase.auth().currentUser;
-        if (currentUser) { // Verifica se currentUser existe antes de acessar propriedades
+        if (currentUser) { 
             const userRoleFromStorage = localStorage.getItem('elitecontrol_user_role');
             if (userRoleFromStorage) {
                 const section = window.location.hash.substring(1);
                 const defaultSection = userRoleFromStorage === 'Vendedor' ? 'vendas-painel' : (userRoleFromStorage === 'Controlador de Estoque' ? 'estoque' : 'geral');
-                
-                document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
-                const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${section || defaultSection}"]`); 
-                if (activeLink) activeLink.classList.add('active');
-                
+                updateSidebarActiveState(section || defaultSection);
                 loadSectionContent(section || defaultSection, {uid: currentUser.uid, email: currentUser.email, role: userRoleFromStorage});
             } else {
-                // Se não tiver role no localStorage, tenta buscar novamente
                  DataService.getUserData(currentUser.uid).then(userData => {
                     if(userData && userData.role){
                         localStorage.setItem('elitecontrol_user_role', userData.role);
-                        // Tenta carregar a seção novamente
                         const section = window.location.hash.substring(1);
                         const defaultSection = userData.role === 'Vendedor' ? 'vendas-painel' : (userData.role === 'Controlador de Estoque' ? 'estoque' : 'geral');
+                        updateSidebarActiveState(section || defaultSection);
                         loadSectionContent(section || defaultSection, {uid: currentUser.uid, email: currentUser.email, ...userData});
                     }
-                 });
+                 }).catch(err => console.error("Erro ao buscar dados do usuário no hashchange:", err));
             }
         }
     });
@@ -616,11 +666,12 @@ function setupEventListeners() {
             const button = e.target.closest('.delete-product-btn');
             window.handleDeleteProductConfirmation(button.dataset.productId, button.dataset.productName);
         }
-        if (e.target.id === 'openAddProductModalButton' || (e.target.closest('#openAddProductModalButton'))) { // Verifica se o clique foi no botão ou em um filho
+        if (e.target.id === 'openAddProductModalButton' || (e.target.closest('#openAddProductModalButton'))) {
+             console.log("Botão Adicionar Novo Produto clicado (delegação)");
              openProductModal();
         }
-         // Listener para o botão Adicionar do KPI de Controlador de Estoque
         if (e.target.id === 'addProductFromKPIButton' || (e.target.closest('#addProductFromKPIButton'))) {
+            console.log("Botão Adicionar Produto do KPI clicado (delegação)");
             openProductModal();
         }
     });
@@ -647,159 +698,80 @@ function setupEventListeners() {
             }
         });
     }
-    // Listeners para o modal de produto (adicionados aqui para garantir que os elementos existam)
-    const localCloseProductModalButton = document.getElementById('closeProductModalButton');
-    const localCancelProductFormButton = document.getElementById('cancelProductFormButton');
-    const localProductForm = document.getElementById('productForm');
-
-    if (localCloseProductModalButton) localCloseProductModalButton.addEventListener('click', closeProductModal);
-    if (localCancelProductFormButton) localCancelProductFormButton.addEventListener('click', closeProductModal);
-    if (localProductForm) localProductForm.addEventListener('submit', handleProductFormSubmit);
+    // Listeners para o modal de produto (garantir que os elementos do modal sejam referenciados corretamente)
+    if (closeProductModalButton) closeProductModalButton.addEventListener('click', closeProductModal);
+    if (cancelProductFormButton) cancelProductFormButton.addEventListener('click', closeProductModal);
+    if (productForm) productForm.addEventListener('submit', handleProductFormSubmit);
 }
 
-async function handleLogin(e) {
-    e.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    if (!email || !password) { showLoginError('Por favor, preencha email e senha.'); return; }
-    const loginButton = e.target.querySelector('button[type="submit"]');
-    const originalButtonText = loginButton.textContent;
-    loginButton.disabled = true; loginButton.textContent = 'Entrando...';
-    try {
-        await firebase.auth().signInWithEmailAndPassword(email, password);
-        showLoginError(''); 
-    } catch (error) {
-        console.error("Erro de login:", error);
-        let friendlyMessage = "Email ou senha inválidos.";
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') friendlyMessage = "Usuário não encontrado ou senha incorreta.";
-        else if (error.code === 'auth/wrong-password') friendlyMessage = "Senha incorreta.";
-        else if (error.code === 'auth/invalid-email') friendlyMessage = "O formato do email é inválido.";
-        else if (error.code === 'auth/network-request-failed') friendlyMessage = "Erro de rede. Verifique sua conexão.";
-        showLoginError(friendlyMessage);
-    } finally {
-        loginButton.disabled = false; loginButton.textContent = originalButtonText;
-    }
+// Função para atualizar o estado ativo na sidebar
+function updateSidebarActiveState(currentSection) {
+    document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
+    const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${currentSection}"]`);
+    if (activeLink) activeLink.classList.add('active');
 }
 
-function showLoginError(message) {
-    const errorElement = document.getElementById('loginErrorMessage');
-    if (errorElement) { errorElement.textContent = message; errorElement.classList.toggle('hidden', !message); }
-}
 
-async function handleLogout() {
-    try {
-        await firebase.auth().signOut();
-        sessionStorage.removeItem('welcomeAlertShown'); 
-        window.location.hash = ''; 
-        console.log("Logout realizado com sucesso.");
-    } catch (error) {
-        console.error("Erro ao fazer logout:", error);
-        showTemporaryAlert('Erro ao sair. Tente novamente.', 'error');
-    }
-}
+// Função para mostrar um modal de confirmação customizado
+function showCustomConfirm(message, onConfirm) {
+    // Remove qualquer modal de confirmação anterior
+    const existingModal = document.getElementById('customConfirmModal');
+    if (existingModal) existingModal.remove();
 
-function initializeNotifications() {
-    if (!document.getElementById('notificationCountBadge')) return;
-    let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]');
-    if (notifications.length === 0) { 
-        notifications = [
-            { id: 'notif1', title: 'Bem-vindo!', message: 'Seu sistema EliteControl está pronto.', time: 'Agora', read: false, type: 'info' },
-            { id: 'notif2', title: 'Dica', message: 'Explore os relatórios para insights.', time: '1h atrás', read: false, type: 'info' }
-        ];
-        localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications));
-    }
-    updateNotificationsUI();
-}
-function updateNotificationsUI() {
-    const list = document.getElementById('notificationList');
-    const badge = document.getElementById('notificationCountBadge');
-    if (!list || !badge) return;
-    const notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]');
-    const unreadCount = notifications.filter(n => !n.read).length;
-    badge.textContent = unreadCount;
-    badge.classList.toggle('hidden', unreadCount === 0);
-    list.innerHTML = notifications.length === 0 ? '<div class="p-4 text-center text-slate-400">Nenhuma notificação.</div>' 
-        : notifications.map(n => {
-            let badgeClass = 'info'; 
-            if (n.type === 'warning') badgeClass = 'warning';
-            else if (n.type === 'error') badgeClass = 'error';
-            else if (n.type === 'success') badgeClass = 'success';
-            // Não adicionar o listener aqui diretamente se for apenas innerHTML
-            return `<div class="notification-item ${n.read ? '' : 'unread'}" data-id="${n.id}" onclick="markNotificationAsRead('${n.id}')">
-                        <div class="notification-item-header">
-                            <div class="notification-item-title">${n.title}</div>
-                            <div class="notification-item-badge ${badgeClass}">${n.type.charAt(0).toUpperCase() + n.type.slice(1)}</div>
-                        </div>
-                        <div class="notification-item-message">${n.message}</div>
-                        <div class="notification-item-footer">
-                            <div class="notification-item-time">${n.time}</div>
-                            ${!n.read ? '<div class="notification-item-action">Marcar como lida</div>' : ''}
-                        </div>
-                    </div>`;
-        }).join('');
-}
-function markNotificationAsRead(id) { // Chamada por onclick no HTML
-    let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]');
-    notifications = notifications.map(n => n.id === id ? { ...n, read: true } : n);
-    localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications));
-    updateNotificationsUI();
-}
-function markAllNotificationsAsRead() {
-    let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]');
-    notifications = notifications.map(n => ({ ...n, read: true }));
-    localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications));
-    updateNotificationsUI();
-    const dropdown = document.getElementById('notificationDropdown');
-    if (dropdown) dropdown.classList.add('hidden');
-}
+    const modalBackdrop = document.createElement('div');
+    modalBackdrop.id = 'customConfirmModal';
+    modalBackdrop.className = 'modal-backdrop show'; // Usa 'show' para exibir imediatamente
 
-function initializeSidebar(role) { 
-    if (!document.getElementById('navLinks') || !role) return;
-    let links = [];
-    const currentHash = window.location.hash.substring(1);
-    const defaultActiveSection = (role === 'Vendedor' ? 'vendas-painel' : (role === 'Controlador de Estoque' ? 'estoque' : 'geral'));
-    const isActive = (section) => currentHash ? currentHash === section : section === defaultActiveSection;
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content show'; // Usa 'show' para exibir imediatamente
+    modalContent.style.maxWidth = '400px';
 
-    if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: isActive('geral'), section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', active: isActive('vendas'), section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', active: isActive('usuarios'), section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ];
-    else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: isActive('estoque'), section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', active: isActive('fornecedores'), section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', active: isActive('movimentacoes'), section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', active: isActive('relatorios-estoque'), section: 'relatorios-estoque' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ];
-    else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: isActive('vendas-painel'), section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', active: isActive('produtos-consulta'), section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', active: isActive('minhas-vendas'), section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', active: isActive('clientes'), section: 'clientes' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ];
-    else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', active: isActive('config'), section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); }
+    const modalHeader = document.createElement('div');
+    modalHeader.className = 'modal-header';
+    modalHeader.innerHTML = '<h3 class="modal-title">Confirmação</h3>';
     
-    const navLinksContainer = document.getElementById('navLinks');
-    navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join('');
+    const modalBody = document.createElement('div');
+    modalBody.className = 'modal-body';
+    modalBody.textContent = message;
+
+    const modalFooter = document.createElement('div');
+    modalFooter.className = 'modal-footer';
+
+    const cancelButton = document.createElement('button');
+    cancelButton.className = 'btn-secondary py-2 px-4 rounded-md hover:bg-slate-600';
+    cancelButton.textContent = 'Cancelar';
+    cancelButton.onclick = () => modalBackdrop.remove();
+
+    const confirmButton = document.createElement('button');
+    confirmButton.className = 'btn-primary py-2 px-4 rounded-md bg-red-600 hover:bg-red-700'; // Estilo de perigo
+    confirmButton.textContent = 'Confirmar Exclusão';
+    confirmButton.onclick = () => {
+        onConfirm();
+        modalBackdrop.remove();
+    };
+
+    modalFooter.appendChild(cancelButton);
+    modalFooter.appendChild(confirmButton);
+    modalContent.appendChild(modalHeader);
+    modalContent.appendChild(modalBody);
+    modalContent.appendChild(modalFooter);
+    modalBackdrop.appendChild(modalContent);
+    document.body.appendChild(modalBackdrop);
 }
 
-function showTemporaryAlert(message, type = 'info', duration = 4000) {
-    const container = document.getElementById('temporaryAlertsContainer');
-    if (!container) return;
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `temporary-alert temporary-alert-${type}`;
-    alertDiv.innerHTML = `<div class="temporary-alert-content"><i class="fas ${type === 'info' ? 'fa-info-circle' : type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle'} temporary-alert-icon"></i><span class="temporary-alert-message">${message}</span></div><button class="temporary-alert-close" onclick="this.parentElement.remove()">&times;</button>`;
-    container.appendChild(alertDiv);
-    setTimeout(() => alertDiv.classList.add('show'), 10);
-    setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration);
-}
 
-function formatCurrency(value) {
-    if (typeof value !== 'number' || isNaN(value)) value = 0;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
-function formatDate(dateInput) { 
-    let date;
-    if (dateInput instanceof Date) date = dateInput;
-    else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate();
-    else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput);
-    else date = new Date(); 
-    if (isNaN(date.getTime())) return "Data inválida"; 
-    return new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric'}).format(date);
-}
-function formatDateTime(dateInput) {
-    let date;
-    if (dateInput instanceof Date) date = dateInput;
-    else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate();
-    else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput);
-    else date = new Date(); 
-     if (isNaN(date.getTime())) return "Data/hora inválida";
-    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
-}
+// ... (Restante das funções: handleLogin, showLoginError, handleLogout, notifications, initializeSidebar, showTemporaryAlert, formatCurrency, formatDate, formatDateTime)
+// COLE AQUI AS VERSÕES MAIS RECENTES E FUNCIONAIS DESSAS FUNÇÕES QUE VOCÊ JÁ TEM
+async function handleLogin(e) { e.preventDefault(); const email = document.getElementById('email').value; const password = document.getElementById('password').value; if (!email || !password) { showLoginError('Por favor, preencha email e senha.'); return; } const loginButton = e.target.querySelector('button[type="submit"]'); const originalButtonText = loginButton.textContent; loginButton.disabled = true; loginButton.textContent = 'Entrando...'; try { await firebase.auth().signInWithEmailAndPassword(email, password); showLoginError(''); } catch (error) { console.error("Erro de login:", error); let friendlyMessage = "Email ou senha inválidos."; if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') friendlyMessage = "Usuário não encontrado ou senha incorreta."; else if (error.code === 'auth/wrong-password') friendlyMessage = "Senha incorreta."; else if (error.code === 'auth/invalid-email') friendlyMessage = "O formato do email é inválido."; else if (error.code === 'auth/network-request-failed') friendlyMessage = "Erro de rede. Verifique sua conexão."; showLoginError(friendlyMessage); } finally { loginButton.disabled = false; loginButton.textContent = originalButtonText; } }
+function showLoginError(message) { const errorElement = document.getElementById('loginErrorMessage'); if (errorElement) { errorElement.textContent = message; errorElement.classList.toggle('hidden', !message); } }
+async function handleLogout() { try { await firebase.auth().signOut(); sessionStorage.removeItem('welcomeAlertShown'); window.location.hash = ''; console.log("Logout realizado com sucesso."); } catch (error) { console.error("Erro ao fazer logout:", error); showTemporaryAlert('Erro ao sair. Tente novamente.', 'error'); } }
+function initializeNotifications() { if (!document.getElementById('notificationCountBadge')) return; let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]'); if (notifications.length === 0) {  notifications = [ { id: 'notif1', title: 'Bem-vindo!', message: 'Seu sistema EliteControl está pronto.', time: 'Agora', read: false, type: 'info' }, { id: 'notif2', title: 'Dica', message: 'Explore os relatórios para insights.', time: '1h atrás', read: false, type: 'info' } ]; localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications)); } updateNotificationsUI(); }
+function updateNotificationsUI() { const list = document.getElementById('notificationList'); const badge = document.getElementById('notificationCountBadge'); if (!list || !badge) return; const notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]'); const unreadCount = notifications.filter(n => !n.read).length; badge.textContent = unreadCount; badge.classList.toggle('hidden', unreadCount === 0); list.innerHTML = notifications.length === 0 ? '<div class="p-4 text-center text-slate-400">Nenhuma notificação.</div>'  : notifications.map(n => { let badgeClass = 'info';  if (n.type === 'warning') badgeClass = 'warning'; else if (n.type === 'error') badgeClass = 'error'; else if (n.type === 'success') badgeClass = 'success'; const item = document.createElement('div');  item.className = `notification-item ${n.read ? '' : 'unread'}`; item.dataset.id = n.id; item.innerHTML = ` <div class="notification-item-header"> <div class="notification-item-title">${n.title}</div> <div class="notification-item-badge ${badgeClass}">${n.type.charAt(0).toUpperCase() + n.type.slice(1)}</div> </div> <div class="notification-item-message">${n.message}</div> <div class="notification-item-footer"> <div class="notification-item-time">${n.time}</div> ${!n.read ? '<div class="notification-item-action">Marcar como lida</div>' : ''} </div>`; item.addEventListener('click', () => markNotificationAsRead(n.id));  return item.outerHTML;  }).join(''); }
+function markNotificationAsRead(id) { let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]'); notifications = notifications.map(n => n.id === id ? { ...n, read: true } : n); localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications)); updateNotificationsUI(); }
+function markAllNotificationsAsRead() { let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]'); notifications = notifications.map(n => ({ ...n, read: true })); localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications)); updateNotificationsUI(); const dropdown = document.getElementById('notificationDropdown'); if (dropdown) dropdown.classList.add('hidden'); }
+function initializeSidebar(role) {  if (!document.getElementById('navLinks') || !role) return; let links = []; const currentHash = window.location.hash.substring(1); const defaultActiveSection = (role === 'Vendedor' ? 'vendas-painel' : (role === 'Controlador de Estoque' ? 'estoque' : 'geral')); const isActive = (section) => currentHash ? currentHash === section : section === defaultActiveSection; if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: isActive('geral'), section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', active: isActive('vendas'), section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', active: isActive('usuarios'), section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ]; else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: isActive('estoque'), section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', active: isActive('fornecedores'), section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', active: isActive('movimentacoes'), section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', active: isActive('relatorios-estoque'), section: 'relatorios-estoque' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ]; else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: isActive('vendas-painel'), section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', active: isActive('produtos-consulta'), section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', active: isActive('minhas-vendas'), section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', active: isActive('clientes'), section: 'clientes' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ]; else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', active: isActive('config'), section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); } const navLinksContainer = document.getElementById('navLinks'); navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join(''); }
+function showTemporaryAlert(message, type = 'info', duration = 4000) { const container = document.getElementById('temporaryAlertsContainer'); if (!container) return; const alertDiv = document.createElement('div'); alertDiv.className = `temporary-alert temporary-alert-${type}`; alertDiv.innerHTML = `<div class="temporary-alert-content"><i class="fas ${type === 'info' ? 'fa-info-circle' : type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle'} temporary-alert-icon"></i><span class="temporary-alert-message">${message}</span></div><button class="temporary-alert-close" onclick="this.parentElement.remove()">&times;</button>`; container.appendChild(alertDiv); setTimeout(() => alertDiv.classList.add('show'), 10); setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration); }
+function formatCurrency(value) { if (typeof value !== 'number' || isNaN(value)) value = 0; return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
+function formatDate(dateInput) {  let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();  if (isNaN(date.getTime())) return "Data inválida";  return new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric'}).format(date); }
+function formatDateTime(dateInput) { let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();   if (isNaN(date.getTime())) return "Data/hora inválida"; return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date); }
 
