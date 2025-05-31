@@ -8,18 +8,16 @@ const DataService = {
     // --- Funções de Usuário ---
     getUserData: async function(userId) {
         if (!db) {
-            console.error("Firestore (db) não está inicializado!");
+            console.error("Firestore (db) não está inicializado em getUserData!");
             throw new Error("Conexão com banco de dados não disponível.");
         }
         try {
             const userDocRef = db.collection('users').doc(userId);
             const userDoc = await userDocRef.get();
-            if (userDoc.exists) {
+            if (userDoc.exists) { // CORRETO: .exists é uma propriedade
                 return { uid: userId, ...userDoc.data() };
             } else {
                 console.warn(`Documento do usuário não encontrado pelo UID: ${userId} na coleção 'users'.`);
-                // Tenta buscar pelo email como fallback (se o UID não for o ID do documento)
-                // Isso pode ser útil em cenários de migração.
                 if(firebase.auth().currentUser && firebase.auth().currentUser.email){
                     const emailQuerySnapshot = await db.collection('users').where('email', '==', firebase.auth().currentUser.email).limit(1).get();
                     if(!emailQuerySnapshot.empty){
@@ -38,9 +36,9 @@ const DataService = {
 
     // --- Funções de Produtos ---
     getProducts: async function() {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em getProducts");
         try {
-            const snapshot = await db.collection('products').orderBy('name').get(); // Ordena por nome
+            const snapshot = await db.collection('products').orderBy('name').get(); 
             const products = [];
             snapshot.forEach(doc => {
                 products.push({ id: doc.id, ...doc.data() });
@@ -54,11 +52,14 @@ const DataService = {
     },
 
     getProductById: async function(productId) {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em getProductById");
         try {
             const docRef = db.collection('products').doc(productId);
             const docSnap = await docRef.get();
-            if (docSnap.exists()) {
+            
+            console.log("docSnap em getProductById para ID", productId, ":", docSnap);
+            // CORREÇÃO APLICADA AQUI: docSnap.exists é uma propriedade booleana
+            if (docSnap.exists) { 
                 console.log("Produto encontrado por ID:", productId, docSnap.data());
                 return { id: docSnap.id, ...docSnap.data() };
             } else {
@@ -72,7 +73,7 @@ const DataService = {
     },
 
     addProduct: async function(productData) {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em addProduct");
         try {
             productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
             productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -88,7 +89,7 @@ const DataService = {
     },
 
     updateProduct: async function(productId, productData) {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em updateProduct");
         try {
             productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
             if (productData.price !== undefined) productData.price = Number(productData.price) || 0;
@@ -103,7 +104,7 @@ const DataService = {
     },
 
     deleteProduct: async function(productId) {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em deleteProduct");
         try {
             await db.collection('products').doc(productId).delete();
             console.log("Produto deletado:", productId);
@@ -116,7 +117,7 @@ const DataService = {
 
     // --- Funções de Vendas ---
     getSales: async function() {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em getSales");
         try {
             const snapshot = await db.collection('sales').orderBy('date', 'desc').get();
             const sales = [];
@@ -126,7 +127,7 @@ const DataService = {
                     id: doc.id, 
                     ...data,
                     total: Number(data.total) || 0, 
-                    date: data.date // Mantém como Timestamp para formatação posterior
+                    date: data.date 
                 });
             });
             console.log("Vendas buscadas:", sales);
@@ -138,7 +139,7 @@ const DataService = {
     },
 
     addSale: async function(saleData, productsSoldDetails, sellerName) {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em addSale");
         
         const batch = db.batch();
         try {
@@ -181,7 +182,7 @@ const DataService = {
 
     // --- Funções de Estatísticas ---
     getProductStats: async function() {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em getProductStats");
         const stats = { totalProducts: 0, lowStock: 0, categories: {} };
         try {
             const productsSnapshot = await db.collection('products').get();
@@ -204,7 +205,7 @@ const DataService = {
     },
 
     getSalesStats: async function() {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em getSalesStats");
         const stats = { totalSales: 0, todaySales: 0, totalRevenue: 0, todayRevenue: 0 };
         try {
             const salesSnapshot = await db.collection('sales').get();
@@ -212,14 +213,14 @@ const DataService = {
 
             const todayDate = new Date();
             const startOfToday = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
-            const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000); // Início do dia seguinte
+            const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000); 
 
             salesSnapshot.forEach(doc => {
                 const sale = doc.data();
                 const saleTotalNumber = Number(sale.total) || 0;
                 stats.totalRevenue += saleTotalNumber;
                 
-                if (sale.date && typeof sale.date.toDate === 'function') { // Verifica se é um Timestamp
+                if (sale.date && typeof sale.date.toDate === 'function') { 
                     const saleDate = sale.date.toDate();
                     if (saleDate >= startOfToday && saleDate < endOfToday) {
                         stats.todaySales++;
@@ -236,7 +237,7 @@ const DataService = {
     },
     
     getTopProducts: async function(limit = 5) {
-        if (!db) throw new Error("Firestore não inicializado");
+        if (!db) throw new Error("Firestore não inicializado em getTopProducts");
         try {
             const salesSnapshot = await db.collection('sales').get();
             const productCounts = {};
@@ -246,7 +247,7 @@ const DataService = {
                 if (sale.productsDetail && Array.isArray(sale.productsDetail)) {
                     sale.productsDetail.forEach(item => {
                         if (item.productId) {
-                            const productName = item.name || item.productId; // Usa o nome do produto se disponível
+                            const productName = item.name || item.productId; 
                             productCounts[productName] = (productCounts[productName] || 0) + (Number(item.quantity) || 0);
                         }
                     });
