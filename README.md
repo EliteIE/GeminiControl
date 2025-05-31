@@ -1,1 +1,1 @@
-# GeminiControl
+# GeminiControl-app
