@@ -1,8 +1,5 @@
 // js/firebase-service.js
-// Este arquivo substitui o elitecontrol-data.js e interage com o Firebase.
-
-// Certifique-se de que 'db' e 'firebase' (para FieldValue e Timestamp) estão acessíveis.
-// Eles são inicializados em firebase-config.js e estão no escopo global.
+// Versão com ajustes para tipo de 'total' e inclusão de 'sellerName'
 
 const DataService = {
     // --- Funções de Usuário ---
@@ -46,9 +43,11 @@ const DataService = {
     addProduct: async function(productData) {
         if (!db) throw new Error("Firestore não inicializado");
         try {
-            // Adicionar timestamps de criação/atualização, se desejado
-            // productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            // productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+            productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+            // Garante que price e stock sejam números
+            productData.price = Number(productData.price) || 0;
+            productData.stock = Number(productData.stock) || 0;
             const docRef = await db.collection('products').add(productData);
             console.log("Produto adicionado com ID:", docRef.id);
             return { id: docRef.id, ...productData };
@@ -61,7 +60,9 @@ const DataService = {
     updateProduct: async function(productId, productData) {
         if (!db) throw new Error("Firestore não inicializado");
         try {
-            // productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+            productData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+            if (productData.price !== undefined) productData.price = Number(productData.price) || 0;
+            if (productData.stock !== undefined) productData.stock = Number(productData.stock) || 0;
             await db.collection('products').doc(productId).update(productData);
             console.log("Produto atualizado:", productId);
             return { id: productId, ...productData };
@@ -83,7 +84,6 @@ const DataService = {
         }
     },
 
-
     // --- Funções de Vendas ---
     getSales: async function() {
         if (!db) throw new Error("Firestore não inicializado");
@@ -95,6 +95,8 @@ const DataService = {
                 sales.push({ 
                     id: doc.id, 
                     ...data,
+                    // Garante que 'total' seja número ao ler
+                    total: Number(data.total) || 0, 
                     date: data.date.toDate ? data.date.toDate().toISOString().split('T')[0] : data.date 
                 });
             });
@@ -106,50 +108,49 @@ const DataService = {
         }
     },
 
-    addSale: async function(saleData, productsSold) {
-        // productsSold: array de objetos [{ productId: 'xyz', quantity: 2, unitPrice: 10.00, name: 'Produto X'}, ...]
+    addSale: async function(saleData, productsSold, sellerName) { // Adicionado sellerName como parâmetro
         if (!db) throw new Error("Firestore não inicializado");
         
         const batch = db.batch();
-
         try {
-            // 1. Adicionar a venda
-            const saleDocRef = db.collection('sales').doc(); // Gera um novo ID para a venda
+            const saleDocRef = db.collection('sales').doc();
+            const calculatedTotal = productsSold.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+            
             const salePayload = {
-                ...saleData,
-                date: firebase.firestore.Timestamp.fromDate(new Date(saleData.dateString)), // Armazena como Timestamp
-                sellerId: firebase.auth().currentUser.uid, // Pega o UID do usuário logado
-                // sellerName: (pode ser adicionado se tiver o nome do usuário aqui)
-                productsDetail: productsSold, // Array com detalhes dos produtos vendidos
-                total: productsSold.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
+                // ...saleData, // Cuidado para não sobrescrever o 'total' ou 'date' com formato errado
+                date: firebase.firestore.Timestamp.fromDate(new Date(saleData.dateString)), 
+                sellerId: firebase.auth().currentUser.uid,
+                sellerName: sellerName || "Vendedor Desconhecido", // Adiciona sellerName
+                productsDetail: productsSold.map(p => ({ // Garante que quantity e unitPrice sejam números
+                    ...p,
+                    quantity: Number(p.quantity) || 0,
+                    unitPrice: Number(p.unitPrice) || 0
+                })), 
+                total: calculatedTotal // Salva como Number
             };
             batch.set(saleDocRef, salePayload);
 
-            // 2. Atualizar o estoque de cada produto vendido
             for (const item of productsSold) {
-                if (!item.productId || typeof item.quantity !== 'number' || item.quantity <= 0) {
+                if (!item.productId || typeof (Number(item.quantity)) !== 'number' || Number(item.quantity) <= 0) {
                     throw new Error(`Dados inválidos para o produto na venda: ${item.name || 'ID desconhecido'}`);
                 }
                 const productRef = db.collection('products').doc(item.productId);
-                // Usar FieldValue.increment para decrementar o estoque de forma atômica
                 batch.update(productRef, { 
-                    stock: firebase.firestore.FieldValue.increment(-item.quantity) 
+                    stock: firebase.firestore.FieldValue.increment(-Number(item.quantity)) 
                 });
             }
 
-            // 3. Commit da transação em lote
             await batch.commit();
             console.log("Venda adicionada e estoque atualizado. ID da Venda:", saleDocRef.id);
             return { id: saleDocRef.id, ...salePayload };
 
         } catch (error) {
             console.error("Erro ao adicionar venda e atualizar estoque:", error);
-            // Se houver um erro, o batch não será concluído, mantendo a consistência.
             throw error;
         }
     },
 
-    // --- Funções de Estatísticas (Exemplos Iniciais) ---
+    // --- Funções de Estatísticas ---
     getProductStats: async function() {
         if (!db) throw new Error("Firestore não inicializado");
         const stats = { totalProducts: 0, lowStock: 0, categories: {} };
@@ -159,7 +160,7 @@ const DataService = {
             const categoriesCount = {};
             productsSnapshot.forEach(doc => {
                 const product = doc.data();
-                if (product.stock < 20) { // Limite de estoque baixo
+                if (Number(product.stock) < 20) { 
                     stats.lowStock++;
                 }
                 categoriesCount[product.category] = (categoriesCount[product.category] || 0) + 1;
@@ -182,14 +183,17 @@ const DataService = {
 
             const today = new Date();
             const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+            // const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1); // Correção: endOfToday deve ser o início do dia seguinte
 
             salesSnapshot.forEach(doc => {
                 const sale = doc.data();
-                stats.totalRevenue += sale.total || 0;
-                if (sale.date.toDate() >= startOfToday && sale.date.toDate() < endOfToday) {
+                const saleTotalNumber = Number(sale.total) || 0; // Garante que é número
+                stats.totalRevenue += saleTotalNumber;
+                
+                const saleDate = sale.date.toDate ? sale.date.toDate() : new Date(sale.date);
+                if (saleDate >= startOfToday && saleDate < new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000) ) { // Verifica se a venda é de hoje
                     stats.todaySales++;
-                    stats.todayRevenue += sale.total || 0;
+                    stats.todayRevenue += saleTotalNumber;
                 }
             });
             console.log("Estatísticas de vendas:", stats);
@@ -202,8 +206,6 @@ const DataService = {
     
     getTopProducts: async function(limit = 5) {
         if (!db) throw new Error("Firestore não inicializado");
-        // Esta é uma forma simplificada. Para performance em larga escala,
-        // considere agregar dados com Firebase Functions ou manter contadores.
         try {
             const salesSnapshot = await db.collection('sales').get();
             const productCounts = {};
@@ -213,9 +215,8 @@ const DataService = {
                 if (sale.productsDetail && Array.isArray(sale.productsDetail)) {
                     sale.productsDetail.forEach(item => {
                         if (item.productId) {
-                             // Usando o nome do produto diretamente se disponível, ou o ID
                             const productName = item.name || item.productId;
-                            productCounts[productName] = (productCounts[productName] || 0) + item.quantity;
+                            productCounts[productName] = (productCounts[productName] || 0) + (Number(item.quantity) || 0);
                         }
                     });
                 }
@@ -236,5 +237,4 @@ const DataService = {
     }
 };
 
-// Tornar o DataService globalmente acessível (se não estiver usando módulos ES6)
 window.DataService = DataService;
