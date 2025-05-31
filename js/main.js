@@ -1,4 +1,16 @@
-// js/main.js - Com Carregamento de Seções e Dashboard Dinâmico
+// js/main.js - Com Modal de Produtos, Carregamento de Seções e Dashboard Dinâmico
+
+// Variáveis globais para o modal de produto
+const productModal = document.getElementById('productModal');
+const productForm = document.getElementById('productForm');
+const productModalTitle = document.getElementById('productModalTitle');
+const productIdField = document.getElementById('productId');
+const productNameField = document.getElementById('productName');
+const productCategoryField = document.getElementById('productCategory');
+const productPriceField = document.getElementById('productPrice');
+const productStockField = document.getElementById('productStock');
+const closeProductModalButton = document.getElementById('closeProductModalButton');
+const cancelProductFormButton = document.getElementById('cancelProductFormButton');
 
 // Configurações e Inicialização
 document.addEventListener('DOMContentLoaded', function() {
@@ -15,11 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log("userDataFromService.role encontrado:", userDataFromService.role);
                     localStorage.setItem('elitecontrol_user_role', userDataFromService.role); 
                     
-                    const currentUser = { 
-                        uid: user.uid, 
-                        email: user.email, 
-                        ...userDataFromService 
-                    };
+                    const currentUser = { uid: user.uid, email: user.email, ...userDataFromService };
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
@@ -32,16 +40,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         window.location.href = 'dashboard.html';
                     } else if (isDashboardPage) {
                         console.log("Já está no dashboard, verificando hash da URL...");
-                        // Verifica se há uma seção na URL (ex: #produtos) para carregar
-                        if (window.location.hash && window.location.hash !== "#" && window.location.hash !== "#geral") { // Não recarrega #geral que é o padrão
-                            const section = window.location.hash.substring(1);
+                        const section = window.location.hash.substring(1);
+                        if (section && section !== "#" && section !== "geral" && section !== "vendas-painel" && section !== "estoque") {
                             await loadSectionContent(section, currentUser);
                         } else {
-                            // Carrega dados padrão do dashboard (KPIs, gráficos) se não houver hash ou for #geral
                             await loadDashboardData(currentUser); 
                         }
-                    } else {
-                        console.warn("Não redirecionou, pathname não correspondeu:", currentPath);
                     }
                 } else {
                     console.error("FALHA NA VERIFICAÇÃO: userDataFromService não existe ou userDataFromService.role está indefinido/falsy.");
@@ -60,18 +64,80 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             console.log("Nenhum usuário logado (onAuthStateChanged).");
             localStorage.removeItem('elitecontrol_user_role');
-            if (document.getElementById('userInitials')) { 
-                 clearDashboardUI();
-            }
+            if (document.getElementById('userInitials')) clearDashboardUI();
             const basePath = "/GeminiControl/";
             const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname === basePath || window.location.pathname === basePath + "index.html";
             if (!isIndexPage) {
-                 console.log("Redirecionando para index.html pois não está logado e não está na index.");
+                console.log("Redirecionando para index.html pois não está logado e não está na index.");
                 window.location.href = 'index.html'; 
             }
         }
     });
 });
+
+// --- Funções do Modal de Produto ---
+function openProductModal(product = null) {
+    productForm.reset(); // Limpa o formulário
+    if (product) { // Modo Edição
+        productModalTitle.textContent = 'Editar Produto';
+        productIdField.value = product.id;
+        productNameField.value = product.name;
+        productCategoryField.value = product.category;
+        productPriceField.value = product.price;
+        productStockField.value = product.stock;
+    } else { // Modo Adição
+        productModalTitle.textContent = 'Adicionar Novo Produto';
+        productIdField.value = ''; // Garante que o ID esteja vazio para adição
+    }
+    if (productModal) productModal.classList.remove('hidden');
+}
+
+function closeProductModal() {
+    if (productModal) productModal.classList.add('hidden');
+}
+
+async function handleProductFormSubmit(event) {
+    event.preventDefault();
+    const id = productIdField.value;
+    const productData = {
+        name: productNameField.value,
+        category: productCategoryField.value,
+        price: parseFloat(productPriceField.value),
+        stock: parseInt(productStockField.value)
+    };
+
+    if (!productData.name || !productData.category || isNaN(productData.price) || isNaN(productData.stock)) {
+        showTemporaryAlert("Por favor, preencha todos os campos corretamente.", "warning");
+        return;
+    }
+
+    const saveButton = document.getElementById('saveProductButton');
+    saveButton.disabled = true;
+    saveButton.textContent = 'Salvando...';
+
+    try {
+        if (id) { // Edição
+            await DataService.updateProduct(id, productData);
+            showTemporaryAlert('Produto atualizado com sucesso!', 'success');
+        } else { // Adição
+            await DataService.addProduct(productData);
+            showTemporaryAlert('Produto adicionado com sucesso!', 'success');
+        }
+        closeProductModal();
+        // Recarregar a lista de produtos para refletir as mudanças
+        const currentUser = firebase.auth().currentUser;
+        if (currentUser) {
+            const userRole = localStorage.getItem('elitecontrol_user_role');
+            loadSectionContent('produtos', { uid: currentUser.uid, email: currentUser.email, role: userRole });
+        }
+    } catch (error) {
+        console.error("Erro ao salvar produto:", error);
+        showTemporaryAlert('Erro ao salvar produto. Tente novamente.', 'error');
+    } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = 'Salvar Produto';
+    }
+}
 
 // Função para carregar e exibir dados dinâmicos no dashboard (KPIs, gráficos)
 async function loadDashboardData(currentUser) {
@@ -82,47 +148,23 @@ async function loadDashboardData(currentUser) {
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) return;
 
-    // Restaurar HTML padrão do dashboard (KPIs, Gráficos, Atividades)
     dynamicContentArea.innerHTML = `
         <div id="kpiContainer" class="kpi-container">
-            <div class="kpi-card">
-                <div class="kpi-icon-wrapper"><i class="fas fa-dollar-sign kpi-icon"></i></div>
-                <div class="kpi-content"><div class="kpi-title">Receita Total (Geral)</div><div class="kpi-value">R$ 0,00</div></div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-icon-wrapper"><i class="fas fa-shopping-cart kpi-icon"></i></div>
-                <div class="kpi-content"><div class="kpi-title">Total de Vendas (Geral)</div><div class="kpi-value">0</div></div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-icon-wrapper"><i class="fas fa-box kpi-icon"></i></div>
-                <div class="kpi-content"><div class="kpi-title">Total de Produtos</div><div class="kpi-value">0</div></div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-icon-wrapper"><i class="fas fa-plus kpi-icon"></i></div>
-                <div class="kpi-content"><div class="kpi-title">Ação Rápida</div><div class="kpi-value"><button class="btn-primary" id="quickActionButton">Ação</button></div></div>
-            </div>
+            <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-dollar-sign kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Receita Total (Geral)</div><div class="kpi-value">R$ 0,00</div></div></div>
+            <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-shopping-cart kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Total de Vendas (Geral)</div><div class="kpi-value">0</div></div></div>
+            <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-box kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Total de Produtos</div><div class="kpi-value">0</div></div></div>
+            <div class="kpi-card"><div class="kpi-icon-wrapper"><i class="fas fa-plus kpi-icon"></i></div><div class="kpi-content"><div class="kpi-title">Ação Rápida</div><div class="kpi-value"><button class="btn-primary" id="quickActionButton">Ação</button></div></div></div>
         </div>
         <div id="chartsContainer" class="charts-container">
-            <div class="chart-card">
-                <div class="chart-header"><h3 class="chart-title">Vendas por Período</h3><div class="chart-actions"><button class="chart-action-btn" id="salesChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div>
-                <div class="chart-content"><canvas id="salesChart"></canvas></div>
-            </div>
-            <div class="chart-card">
-                <div class="chart-header"><h3 class="chart-title">Produtos Mais Vendidos</h3><div class="chart-actions"><button class="chart-action-btn" id="productsChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div>
-                <div class="chart-content"><canvas id="productsChart"></canvas></div>
-            </div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Vendas por Período</h3><div class="chart-actions"><button class="chart-action-btn" id="salesChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div><div class="chart-content"><canvas id="salesChart"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Produtos Mais Vendidos</h3><div class="chart-actions"><button class="chart-action-btn" id="productsChartOptionsButton"><i class="fas fa-ellipsis-v"></i></button></div></div><div class="chart-content"><canvas id="productsChart"></canvas></div></div>
         </div>
-        <div class="activities-card">
-            <div class="activities-header"><h3 class="activities-title">Atividades Recentes</h3></div>
-            <ul id="recentActivitiesContainer" class="activities-list"></ul>
-        </div>
+        <div class="activities-card"><div class="activities-header"><h3 class="activities-title">Atividades Recentes</h3></div><ul id="recentActivitiesContainer" class="activities-list"></ul></div>
     `;
-    // Re-adicionar listeners para botões de opções dos gráficos se necessário
     const salesChartOptionsButton = document.getElementById('salesChartOptionsButton');
     if (salesChartOptionsButton) salesChartOptionsButton.addEventListener('click', () => showTemporaryAlert('Opções do gráfico de vendas', 'info'));
     const productsChartOptionsButton = document.getElementById('productsChartOptionsButton');
     if (productsChartOptionsButton) productsChartOptionsButton.addEventListener('click', () => showTemporaryAlert('Opções do gráfico de produtos', 'info'));
-
 
     try {
         showTemporaryAlert("Carregando dados do dashboard...", "info", 2000);
@@ -142,11 +184,10 @@ async function loadDashboardData(currentUser) {
 
 // Função para carregar conteúdo de uma seção específica
 async function loadSectionContent(sectionId, currentUser) {
-    console.log(`Carregando seção: ${sectionId}`);
+    console.log(`Carregando seção: ${sectionId} para usuário:`, currentUser);
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) return;
 
-    // Limpa área de conteúdo e mostra um loader simples
     dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin fa-2x"></i> Carregando ${sectionId}...</div>`;
     showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500);
 
@@ -154,8 +195,7 @@ async function loadSectionContent(sectionId, currentUser) {
         if (sectionId === 'produtos' || sectionId === 'produtos-consulta') {
             const products = await DataService.getProducts();
             renderProductsList(products, dynamicContentArea, currentUser.role);
-        } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque') {
-            // Recarrega a visualização padrão do dashboard (KPIs, gráficos)
+        } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque' || !sectionId) { // Adicionado !sectionId para tratar hash vazio
             await loadDashboardData(currentUser);
         }
         // TODO: Adicionar 'else if' para outras seções (registrar-venda, vendas, usuarios, config, etc.)
@@ -165,14 +205,13 @@ async function loadSectionContent(sectionId, currentUser) {
     } catch (error) {
         console.error(`Erro ao carregar seção ${sectionId}:`, error);
         dynamicContentArea.innerHTML = `<div class="p-8 text-center text-red-400">Erro ao carregar conteúdo. Tente novamente.</div>`;
-        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, "error");
+        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, 'error');
     }
 }
 
 // Função para renderizar a lista de produtos
 function renderProductsList(products, container, userRole) {
-    container.innerHTML = ''; // Limpa o container
-
+    container.innerHTML = ''; 
     const title = document.createElement('h2');
     title.className = 'text-xl font-semibold text-slate-100 mb-4';
     title.textContent = 'Lista de Produtos';
@@ -180,13 +219,10 @@ function renderProductsList(products, container, userRole) {
 
     if (userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') {
         const addProductButton = document.createElement('button');
-        addProductButton.id = 'openAddProductModalButton';
+        addProductButton.id = 'openAddProductModalButton'; // ID para o listener
         addProductButton.className = 'btn-primary mb-4 inline-flex items-center';
         addProductButton.innerHTML = '<i class="fas fa-plus mr-2"></i> Adicionar Novo Produto';
-        addProductButton.onclick = () => {
-            // TODO: Implementar abertura de modal para adicionar produto
-            showTemporaryAlert('Abrir modal para adicionar produto (a implementar).', 'info');
-        };
+        // O listener será adicionado em setupEventListeners
         container.appendChild(addProductButton);
     }
 
@@ -221,29 +257,45 @@ function renderProductsList(products, container, userRole) {
             <td class="px-6 py-4 whitespace-nowrap text-sm ${product.stock < 20 ? 'text-red-400 font-semibold' : 'text-slate-300'}">${product.stock}</td>
             ${(userRole === 'Controlador de Estoque' || userRole === 'Dono/Gerente') ? `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                <button class="text-sky-400 hover:text-sky-300 mr-2" onclick="editProduct('${product.id}')"><i class="fas fa-edit"></i></button>
-                <button class="text-red-500 hover:text-red-400" onclick="deleteProductConfirmation('${product.id}', '${product.name}')"><i class="fas fa-trash"></i></button>
+                <button class="text-sky-400 hover:text-sky-300 mr-2 edit-product-btn" data-product-id="${product.id}"><i class="fas fa-edit"></i></button>
+                <button class="text-red-500 hover:text-red-400 delete-product-btn" data-product-id="${product.id}" data-product-name="${product.name}"><i class="fas fa-trash"></i></button>
             </td>` : ''}
         `;
         tbody.appendChild(tr);
     });
     container.appendChild(table);
 }
-// Placeholder para funções de edição/deleção (a serem implementadas com modais e DataService)
-window.editProduct = (productId) => { showTemporaryAlert(`Editar produto ${productId} (a implementar).`, 'info'); };
-window.deleteProductConfirmation = (productId, productName) => { 
-    // TODO: Implementar modal de confirmação
-    if (confirm(`Tem certeza que deseja excluir o produto "${productName}"?`)) {
+
+// Funções globais para botões de ação da tabela (os listeners serão delegados)
+window.handleEditProduct = async (productId) => { 
+    try {
+        // Esta função buscará o produto no DataService para popular o modal
+        // Por enquanto, vamos simular ou buscar do array 'allProducts' se disponível globalmente
+        // Idealmente, DataService.getProductById(productId) seria chamado.
+        // Para este exemplo, vamos assumir que 'products' está acessível ou buscamos novamente.
+        const products = await DataService.getProducts(); // Pode otimizar para não buscar sempre
+        const productToEdit = products.find(p => p.id === productId);
+        if (productToEdit) {
+            openProductModal(productToEdit);
+        } else {
+            showTemporaryAlert('Produto não encontrado para edição.', 'error');
+        }
+    } catch (error) {
+        console.error("Erro ao preparar edição do produto:", error);
+        showTemporaryAlert('Erro ao carregar dados do produto para edição.', 'error');
+    }
+};
+window.handleDeleteProductConfirmation = (productId, productName) => { 
+    if (confirm(`Tem certeza que deseja excluir o produto "${productName}"? Esta ação não pode ser desfeita.`)) {
         DataService.deleteProduct(productId)
             .then(() => {
-                showTemporaryAlert(`Produto "${productName}" excluído.`, 'success');
-                // Recarregar lista de produtos
+                showTemporaryAlert(`Produto "${productName}" excluído com sucesso.`, 'success');
                 const currentUser = firebase.auth().currentUser;
                 if(currentUser) loadSectionContent('produtos', {uid: currentUser.uid, role: localStorage.getItem('elitecontrol_user_role')});
             })
             .catch(err => {
                 console.error("Erro ao excluir produto:", err);
-                showTemporaryAlert(`Erro ao excluir "${productName}".`, 'error');
+                showTemporaryAlert(`Erro ao excluir o produto "${productName}".`, 'error');
             });
     }
 };
@@ -277,7 +329,6 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="newSaleButton">Registrar</button>`;
              const newSaleButton = document.getElementById('newSaleButton');
              if (newSaleButton) newSaleButton.addEventListener('click', () => {
-                // TODO: Implementar navegação para seção de registrar venda
                 window.location.hash = '#registrar-venda';
              });
         }
@@ -289,12 +340,11 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
         if (kpiTitle3) kpiTitle3.textContent = "Nº de Categorias";
         if (kpiValue3) kpiValue3.textContent = productStats.categories ? Object.keys(productStats.categories).length : 0;
         if (kpiTitle4) kpiTitle4.textContent = "Adicionar Produto";
-         if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#newProductButton')) {
-             kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="newProductButton">Adicionar</button>`;
-             const newProductButton = document.getElementById('newProductButton');
-             if(newProductButton) newProductButton.addEventListener('click', () => {
-                // TODO: Implementar abertura de modal ou navegação para adicionar produto
-                window.location.hash = '#produtos'; // Leva para a lista onde o botão de adicionar estará
+         if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#addProductFromKPIButton')) { // Novo ID para evitar conflito
+             kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="addProductFromKPIButton">Adicionar</button>`;
+             const addProductKPIButton = document.getElementById('addProductFromKPIButton');
+             if(addProductKPIButton) addProductKPIButton.addEventListener('click', () => {
+                openProductModal(); // Abre o modal para adicionar novo produto
              });
         }
     } else if (currentUser.role === 'Dono/Gerente') {
@@ -309,8 +359,7 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="viewReportsButton">Detalhes</button>`;
              const viewReportsButton = document.getElementById('viewReportsButton');
              if(viewReportsButton) viewReportsButton.addEventListener('click', () => {
-                // TODO: Implementar navegação para seção de relatórios
-                window.location.hash = '#vendas'; // Exemplo, pode ser uma seção específica de relatórios
+                window.location.hash = '#vendas'; 
              });
         }
     }
@@ -489,31 +538,40 @@ function setupEventListeners() {
     const logoutButton = document.getElementById('logoutButton');
     if (logoutButton) logoutButton.addEventListener('click', handleLogout);
     
-    // Listener para links da Sidebar e hashchange
     window.addEventListener('hashchange', () => {
         const currentUser = firebase.auth().currentUser;
         if (currentUser && localStorage.getItem('elitecontrol_user_role')) {
             const section = window.location.hash.substring(1);
-            if (section) {
-                 loadSectionContent(section, {uid: currentUser.uid, email: currentUser.email, role: localStorage.getItem('elitecontrol_user_role')});
-            } else {
-                // Se o hash for removido ou for '#', carrega o dashboard padrão
-                loadDashboardData({uid: currentUser.uid, email: currentUser.email, role: localStorage.getItem('elitecontrol_user_role')});
-            }
+            const userRole = localStorage.getItem('elitecontrol_user_role');
+            // Atualiza a classe 'active' na sidebar
+            document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
+            const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${section || 'geral'}"]`); // 'geral' se hash vazio
+            if (activeLink) activeLink.classList.add('active');
+            
+            loadSectionContent(section || (userRole === 'Vendedor' ? 'vendas-painel' : (userRole === 'Controlador de Estoque' ? 'estoque' : 'geral')), {uid: currentUser.uid, email: currentUser.email, role: userRole});
         }
     });
-    // Listener para cliques diretos nos links da sidebar (atualiza o hash)
     document.addEventListener('click', function(e) {
         const navLink = e.target.closest('#navLinks a.nav-link');
         if (navLink) {
             e.preventDefault();
-            document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
-            navLink.classList.add('active');
             const section = navLink.dataset.section;
-            window.location.hash = section; // Isso vai disparar o 'hashchange' listener
+            window.location.hash = section; 
+        }
+        // Delegação de eventos para botões de produto
+        if (e.target.closest('.edit-product-btn')) {
+            const button = e.target.closest('.edit-product-btn');
+            window.handleEditProduct(button.dataset.productId);
+        }
+        if (e.target.closest('.delete-product-btn')) {
+            const button = e.target.closest('.delete-product-btn');
+            window.handleDeleteProductConfirmation(button.dataset.productId, button.dataset.productName);
+        }
+        // Listener para o botão "Adicionar Novo Produto" que é renderizado dinamicamente
+        if (e.target.id === 'openAddProductModalButton' || e.target.closest('#openAddProductModalButton')) {
+             openProductModal();
         }
     });
-
 
     const notificationBellButton = document.getElementById('notificationBellButton');
     const notificationDropdown = document.getElementById('notificationDropdown');
@@ -537,6 +595,10 @@ function setupEventListeners() {
             }
         });
     }
+    // Listeners para o modal de produto
+    if (closeProductModalButton) closeProductModalButton.addEventListener('click', closeProductModal);
+    if (cancelProductFormButton) cancelProductFormButton.addEventListener('click', closeProductModal);
+    if (productForm) productForm.addEventListener('submit', handleProductFormSubmit);
 }
 
 async function handleLogin(e) {
@@ -572,7 +634,7 @@ async function handleLogout() {
     try {
         await firebase.auth().signOut();
         sessionStorage.removeItem('welcomeAlertShown'); 
-        window.location.hash = ''; // Limpa o hash na URL ao deslogar
+        window.location.hash = ''; 
         console.log("Logout realizado com sucesso.");
     } catch (error) {
         console.error("Erro ao fazer logout:", error);
@@ -641,19 +703,17 @@ function markAllNotificationsAsRead() {
 function initializeSidebar(role) { 
     if (!document.getElementById('navLinks') || !role) return;
     let links = [];
-    if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: true, section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', section: 'config' } ];
-    else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: true, section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', section: 'relatorios-estoque' }, { icon: 'fa-cog', text: 'Configurações', section: 'config' } ];
-    else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: true, section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', section: 'clientes' }, { icon: 'fa-cog', text: 'Configurações', section: 'config' } ];
-    else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); }
-    const navLinksContainer = document.getElementById('navLinks');
-    navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active && (!window.location.hash || window.location.hash === '#' || window.location.hash === `#${link.section}`) ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join('');
-    // Ativa o link correto com base no hash da URL ao carregar
+    // Define qual link é ativo baseado no hash da URL ou no primeiro link se não houver hash
     const currentHash = window.location.hash.substring(1);
-    if (currentHash) {
-        document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${currentHash}"]`);
-        if (activeLink) activeLink.classList.add('active');
-    }
+    const defaultActiveSection = (role === 'Vendedor' ? 'vendas-painel' : (role === 'Controlador de Estoque' ? 'estoque' : 'geral'));
+
+    if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: (!currentHash || currentHash === 'geral'), section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: (currentHash === 'produtos'), section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: (currentHash === 'registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', active: (currentHash === 'vendas'), section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', active: (currentHash === 'usuarios'), section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ];
+    else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: (!currentHash || currentHash === 'estoque'), section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: (currentHash === 'produtos'), section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', active: (currentHash === 'fornecedores'), section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', active: (currentHash === 'movimentacoes'), section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', active: (currentHash === 'relatorios-estoque'), section: 'relatorios-estoque' }, { icon: 'fa-cogs', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ];
+    else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: (!currentHash || currentHash === 'vendas-painel'), section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', active: (currentHash === 'produtos-consulta'), section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: (currentHash === 'registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', active: (currentHash === 'minhas-vendas'), section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', active: (currentHash === 'clientes'), section: 'clientes' }, { icon: 'fa-cogs', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ];
+    else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', active: (currentHash === 'config'), section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); }
+    
+    const navLinksContainer = document.getElementById('navLinks');
+    navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join('');
 }
 
 function showTemporaryAlert(message, type = 'info', duration = 4000) {
@@ -687,6 +747,4 @@ function formatDateTime(dateInput) {
     else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput);
     else date = new Date(); 
      if (isNaN(date.getTime())) return "Data/hora inválida";
-    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
-}
-
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date)
