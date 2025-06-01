@@ -1,9 +1,6 @@
 // js/firebase-service.js
 // Serviço para interagir com o Firebase Firestore
 
-// Certifique-se de que 'db' e 'firebase' (para FieldValue e Timestamp) estão acessíveis.
-// Eles são inicializados em firebase-config.js e estão no escopo global.
-
 const DataService = {
     // --- Funções de Usuário ---
     getUserData: async function(userId) {
@@ -58,7 +55,7 @@ const DataService = {
             const docSnap = await docRef.get();
             
             console.log("docSnap em getProductById para ID", productId, ":", docSnap);
-            // CORREÇÃO APLICADA AQUI: docSnap.exists é uma propriedade booleana
+            // CORREÇÃO APLICADA E VERIFICADA: docSnap.exists é uma propriedade booleana
             if (docSnap.exists) { 
                 console.log("Produto encontrado por ID:", productId, docSnap.data());
                 return { id: docSnap.id, ...docSnap.data() };
