@@ -243,7 +243,6 @@ async function loadSectionContent(sectionId, currentUser) {
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) {console.error("dynamicContentArea não encontrado em loadSectionContent"); return;}
     dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin fa-2x"></i> Carregando ${sectionId}...</div>`;
-    // showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500); // Removido para não sobrepor o alerta de erro, se houver
     try {
         if (sectionId === 'produtos' || sectionId === 'produtos-consulta') {
             const products = await DataService.getProducts();
@@ -765,5 +764,4 @@ function initializeSidebar(role) {  if (!document.getElementById('navLinks') || 
 function showTemporaryAlert(message, type = 'info', duration = 4000) { const container = document.getElementById('temporaryAlertsContainer'); if (!container) return; const alertDiv = document.createElement('div'); alertDiv.className = `temporary-alert temporary-alert-${type}`; alertDiv.innerHTML = `<div class="temporary-alert-content"><i class="fas ${type === 'info' ? 'fa-info-circle' : type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle'} temporary-alert-icon"></i><span class="temporary-alert-message">${message}</span></div><button class="temporary-alert-close" onclick="this.parentElement.remove()">&times;</button>`; container.appendChild(alertDiv); setTimeout(() => alertDiv.classList.add('show'), 10); setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration); }
 function formatCurrency(value) { if (typeof value !== 'number' || isNaN(value)) value = 0; return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
 function formatDate(dateInput) {  let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();  if (isNaN(date.getTime())) return "Data inválida";  return new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric'}).format(date); }
-function formatDateTime(dateInput) { let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();   if (isNaN(date.getTime())) return "Data/hora inválida"; return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date); }
-
+function formatDateTime(dateInput) { let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate 
