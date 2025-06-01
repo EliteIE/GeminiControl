@@ -21,8 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Verifica se os elementos do modal foram encontrados no DOM
     if (!productModal) console.error("Elemento productModal (ID: productModal) não encontrado no DOM!");
     if (!productForm) console.error("Elemento productForm (ID: productForm) não encontrado no DOM!");
-    // Adicionar mais verificações se necessário para os outros campos do modal
-
+    
     setupEventListeners(); // Configura todos os listeners, incluindo os do modal
     
     firebase.auth().onAuthStateChanged(async (user) => {
@@ -40,13 +39,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
+                    // Ajuste para o caminho base no GitHub Pages ou ambiente local
                     const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") ? "/GeminiControl/" : "/";
                     const isIndexPage = currentPath.endsWith('index.html') || currentPath === basePath || currentPath === (basePath + "index.html");
                     const isDashboardPage = currentPath.includes('dashboard.html');
 
                     if (isIndexPage) {
                         console.log("Redirecionando para dashboard.html...");
-                        window.location.href = 'dashboard.html' + (window.location.hash || '');
+                        // Mantém o hash se existir, para carregar a seção correta no dashboard
+                        window.location.href = 'dashboard.html' + (window.location.hash || ''); 
                     } else if (isDashboardPage) {
                         console.log("Já está no dashboard, verificando hash da URL...");
                         const section = window.location.hash.substring(1);
@@ -68,6 +69,10 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch (error) {
                 console.error("Erro no processo de autenticação ou busca de dados:", error);
                 showTemporaryAlert("Erro ao carregar dados do usuário. Verifique sua conexão.", "error");
+                // Considerar deslogar em caso de erro crítico para evitar loop
+                if (!window.location.pathname.endsWith('index.html')) { // Evita loop se já estiver no login
+                    await firebase.auth().signOut();
+                }
             }
         } else {
             console.log("Nenhum usuário logado (onAuthStateChanged).");
@@ -85,7 +90,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // --- Funções do Modal de Produto ---
 function openProductModal(product = null) {
-    // Re-obter referências aqui para garantir que são válidas no momento da chamada
     productModal = document.getElementById('productModal');
     productForm = document.getElementById('productForm');
     productModalTitle = document.getElementById('productModalTitle');
@@ -95,15 +99,9 @@ function openProductModal(product = null) {
     productPriceField = document.getElementById('productPrice');
     productStockField = document.getElementById('productStock');
 
-
-    if (!productModal) {
-        console.error("Elemento productModal (ID: productModal) não encontrado no DOM ao tentar ABRIR.");
-        showTemporaryAlert("Erro crítico: Formulário de produto não encontrado. Verifique o HTML.", "error");
-        return;
-    }
-     if (!productForm || !productModalTitle || !productIdField || !productNameField || !productCategoryField || !productPriceField || !productStockField) {
-        console.error("Um ou mais elementos do formulário de produto não foram encontrados no DOM.");
-        return;
+    if (!productModal) { console.error("Elemento productModal não encontrado ao ABRIR."); return; }
+    if (!productForm || !productModalTitle || !productIdField || !productNameField || !productCategoryField || !productPriceField || !productStockField) {
+        console.error("Um ou mais elementos do formulário de produto não encontrados."); return;
     }
 
     console.log("Abrindo modal de produto. Produto para editar:", product);
@@ -120,24 +118,23 @@ function openProductModal(product = null) {
         productIdField.value = ''; 
     }
     productModal.classList.remove('hidden');
-    console.log("Modal classList após remover 'hidden':", productModal.classList.toString()); // Log como string
+    console.log("Modal classList após remover 'hidden':", productModal.classList.toString());
     console.log("Estilo de display do modal após remover 'hidden':", window.getComputedStyle(productModal).display);
 }
 
 function closeProductModal() {
-    productModal = document.getElementById('productModal'); // Garante que temos a referência mais recente
+    productModal = document.getElementById('productModal');
     if (productModal) {
         productModal.classList.add('hidden');
         console.log("Modal de produto fechado.");
     } else {
-        console.error("Elemento productModal (ID: productModal) não encontrado ao tentar FECHAR.");
+        console.error("Elemento productModal não encontrado ao FECHAR.");
     }
 }
 
 async function handleProductFormSubmit(event) {
     event.preventDefault();
     console.log("Tentando salvar produto...");
-    // Re-obter referências
     productIdField = document.getElementById('productId');
     productNameField = document.getElementById('productName');
     productCategoryField = document.getElementById('productCategory');
@@ -146,8 +143,7 @@ async function handleProductFormSubmit(event) {
     saveProductButton = document.getElementById('saveProductButton');
 
     if (!productNameField || !productCategoryField || !productPriceField || !productStockField || !productIdField || !saveProductButton) {
-        console.error("Campos do formulário de produto ou botão de salvar não encontrados durante o submit.");
-        return;
+        console.error("Campos do formulário de produto ou botão de salvar não encontrados."); return;
     }
     const id = productIdField.value;
     const productData = {
@@ -167,11 +163,9 @@ async function handleProductFormSubmit(event) {
 
     try {
         if (id) { 
-            console.log("Atualizando produto ID:", id, "com dados:", productData);
             await DataService.updateProduct(id, productData);
             showTemporaryAlert('Produto atualizado com sucesso!', 'success');
         } else { 
-            console.log("Adicionando novo produto com dados:", productData);
             await DataService.addProduct(productData);
             showTemporaryAlert('Produto adicionado com sucesso!', 'success');
         }
@@ -181,11 +175,9 @@ async function handleProductFormSubmit(event) {
             const userRole = localStorage.getItem('elitecontrol_user_role');
             const currentSection = window.location.hash.substring(1);
             const productSection = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
-            
             if(currentSection === productSection){ 
                 loadSectionContent(productSection, {uid: currentUser.uid, email: currentUser.email, role: userRole });
             } else { 
-                 console.log("Produto salvo, mas não recarregando a lista pois não está na seção de produtos.");
                  if (document.activeElement && document.activeElement.id === 'addProductFromKPIButton') {
                     window.location.hash = productSection; 
                  }
@@ -200,7 +192,6 @@ async function handleProductFormSubmit(event) {
     }
 }
 
-// Função para carregar e exibir dados dinâmicos no dashboard (KPIs, gráficos)
 async function loadDashboardData(currentUser) {
     if (!currentUser || !DataService) { console.warn("loadDashboardData: currentUser ou DataService não disponível."); return; }
     const dynamicContentArea = document.getElementById('dynamicContentArea');
@@ -764,4 +755,5 @@ function initializeSidebar(role) {  if (!document.getElementById('navLinks') || 
 function showTemporaryAlert(message, type = 'info', duration = 4000) { const container = document.getElementById('temporaryAlertsContainer'); if (!container) return; const alertDiv = document.createElement('div'); alertDiv.className = `temporary-alert temporary-alert-${type}`; alertDiv.innerHTML = `<div class="temporary-alert-content"><i class="fas ${type === 'info' ? 'fa-info-circle' : type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle'} temporary-alert-icon"></i><span class="temporary-alert-message">${message}</span></div><button class="temporary-alert-close" onclick="this.parentElement.remove()">&times;</button>`; container.appendChild(alertDiv); setTimeout(() => alertDiv.classList.add('show'), 10); setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration); }
 function formatCurrency(value) { if (typeof value !== 'number' || isNaN(value)) value = 0; return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
 function formatDate(dateInput) {  let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();  if (isNaN(date.getTime())) return "Data inválida";  return new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric'}).format(date); }
-function formatDateTime(dateInput) { let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate 
+function formatDateTime(dateInput) { let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();   if (isNaN(date.getTime())) return "Data/hora inválida"; return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date); }
+
