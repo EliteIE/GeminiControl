@@ -1,6 +1,6 @@
 // js/main.js - Com Modal de Produtos, Carregamento de Seções e Dashboard Dinâmico
 
-// Variáveis globais para o modal de produto
+// Variáveis globais para o modal de produto (serão atribuídas em DOMContentLoaded)
 let productModal, productForm, productModalTitle, productIdField, productNameField, productCategoryField, productPriceField, productStockField, closeProductModalButton, cancelProductFormButton, saveProductButton;
 
 // Configurações e Inicialização
@@ -17,6 +17,11 @@ document.addEventListener('DOMContentLoaded', function() {
     closeProductModalButton = document.getElementById('closeProductModalButton');
     cancelProductFormButton = document.getElementById('cancelProductFormButton');
     saveProductButton = document.getElementById('saveProductButton');
+
+    // Verifica se os elementos do modal foram encontrados no DOM
+    if (!productModal) console.error("Elemento productModal (ID: productModal) não encontrado no DOM!");
+    if (!productForm) console.error("Elemento productForm (ID: productForm) não encontrado no DOM!");
+    // Adicionar mais verificações se necessário para os outros campos do modal
 
     setupEventListeners(); // Configura todos os listeners, incluindo os do modal
     
@@ -35,21 +40,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
-                    const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1") ? "/GeminiControl/" : "/";
+                    const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") ? "/GeminiControl/" : "/";
                     const isIndexPage = currentPath.endsWith('index.html') || currentPath === basePath || currentPath === (basePath + "index.html");
                     const isDashboardPage = currentPath.includes('dashboard.html');
 
                     if (isIndexPage) {
                         console.log("Redirecionando para dashboard.html...");
-                        window.location.href = 'dashboard.html' + (window.location.hash || ''); // Mantém o hash se existir
+                        window.location.href = 'dashboard.html' + (window.location.hash || '');
                     } else if (isDashboardPage) {
                         console.log("Já está no dashboard, verificando hash da URL...");
                         const section = window.location.hash.substring(1);
                         const defaultSection = currentUser.role === 'Vendedor' ? 'vendas-painel' : (currentUser.role === 'Controlador de Estoque' ? 'estoque' : 'geral');
                         
-                        // Carrega a seção do hash ou a seção padrão do perfil
                         await loadSectionContent(section || defaultSection, currentUser);
-                        // Atualiza o estado ativo da sidebar com base na seção carregada
                         updateSidebarActiveState(section || defaultSection);
                     }
                 } else {
@@ -70,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Nenhum usuário logado (onAuthStateChanged).");
             localStorage.removeItem('elitecontrol_user_role');
             if (document.getElementById('userInitials')) clearDashboardUI();
-            const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1") ? "/GeminiControl/" : "/";
+            const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") ? "/GeminiControl/" : "/";
             const isIndexPage = window.location.pathname.endsWith('index.html') || window.location.pathname === basePath || window.location.pathname === (basePath + "index.html");
             if (!isIndexPage) {
                  console.log("Redirecionando para index.html pois não está logado e não está na index.");
@@ -82,11 +85,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // --- Funções do Modal de Produto ---
 function openProductModal(product = null) {
-    if (!productModal || !productForm || !productModalTitle || !productIdField || !productNameField || !productCategoryField || !productPriceField || !productStockField) {
-        console.error("Elementos do modal de produto não encontrados no DOM ao tentar abrir.");
-        showTemporaryAlert("Erro ao abrir formulário de produto. Tente recarregar a página.", "error");
+    // Re-obter referências aqui para garantir que são válidas no momento da chamada
+    productModal = document.getElementById('productModal');
+    productForm = document.getElementById('productForm');
+    productModalTitle = document.getElementById('productModalTitle');
+    productIdField = document.getElementById('productId');
+    productNameField = document.getElementById('productName');
+    productCategoryField = document.getElementById('productCategory');
+    productPriceField = document.getElementById('productPrice');
+    productStockField = document.getElementById('productStock');
+
+
+    if (!productModal) {
+        console.error("Elemento productModal (ID: productModal) não encontrado no DOM ao tentar ABRIR.");
+        showTemporaryAlert("Erro crítico: Formulário de produto não encontrado. Verifique o HTML.", "error");
         return;
     }
+     if (!productForm || !productModalTitle || !productIdField || !productNameField || !productCategoryField || !productPriceField || !productStockField) {
+        console.error("Um ou mais elementos do formulário de produto não foram encontrados no DOM.");
+        return;
+    }
+
     console.log("Abrindo modal de produto. Produto para editar:", product);
     productForm.reset(); 
     if (product) { 
@@ -101,18 +120,31 @@ function openProductModal(product = null) {
         productIdField.value = ''; 
     }
     productModal.classList.remove('hidden');
+    console.log("Modal classList após remover 'hidden':", productModal.classList.toString()); // Log como string
+    console.log("Estilo de display do modal após remover 'hidden':", window.getComputedStyle(productModal).display);
 }
 
 function closeProductModal() {
+    productModal = document.getElementById('productModal'); // Garante que temos a referência mais recente
     if (productModal) {
         productModal.classList.add('hidden');
         console.log("Modal de produto fechado.");
+    } else {
+        console.error("Elemento productModal (ID: productModal) não encontrado ao tentar FECHAR.");
     }
 }
 
 async function handleProductFormSubmit(event) {
     event.preventDefault();
     console.log("Tentando salvar produto...");
+    // Re-obter referências
+    productIdField = document.getElementById('productId');
+    productNameField = document.getElementById('productName');
+    productCategoryField = document.getElementById('productCategory');
+    productPriceField = document.getElementById('productPrice');
+    productStockField = document.getElementById('productStock');
+    saveProductButton = document.getElementById('saveProductButton');
+
     if (!productNameField || !productCategoryField || !productPriceField || !productStockField || !productIdField || !saveProductButton) {
         console.error("Campos do formulário de produto ou botão de salvar não encontrados durante o submit.");
         return;
@@ -150,10 +182,13 @@ async function handleProductFormSubmit(event) {
             const currentSection = window.location.hash.substring(1);
             const productSection = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
             
-            if(currentSection === productSection){ // Recarrega apenas se já estiver na seção de produtos
+            if(currentSection === productSection){ 
                 loadSectionContent(productSection, {uid: currentUser.uid, email: currentUser.email, role: userRole });
-            } else { // Caso contrário, apenas fecha o modal, o usuário pode querer continuar na seção atual
+            } else { 
                  console.log("Produto salvo, mas não recarregando a lista pois não está na seção de produtos.");
+                 if (document.activeElement && document.activeElement.id === 'addProductFromKPIButton') {
+                    window.location.hash = productSection; 
+                 }
             }
         }
     } catch (error) {
@@ -167,7 +202,6 @@ async function handleProductFormSubmit(event) {
 
 // Função para carregar e exibir dados dinâmicos no dashboard (KPIs, gráficos)
 async function loadDashboardData(currentUser) {
-    // ... (manter esta função como na versão main_js_section_loading)
     if (!currentUser || !DataService) { console.warn("loadDashboardData: currentUser ou DataService não disponível."); return; }
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) { console.error("dynamicContentArea não encontrado"); return; }
@@ -204,14 +238,12 @@ async function loadDashboardData(currentUser) {
     }
 }
 
-// Função para carregar conteúdo de uma seção específica
 async function loadSectionContent(sectionId, currentUser) {
-    // ... (manter esta função como na versão main_js_section_loading, mas garantir que currentUser.role seja passado para renderProductsList)
     console.log(`Carregando seção: ${sectionId} para usuário:`, currentUser);
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) {console.error("dynamicContentArea não encontrado em loadSectionContent"); return;}
     dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin fa-2x"></i> Carregando ${sectionId}...</div>`;
-    showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500);
+    // showTemporaryAlert(`Carregando ${sectionId}...`, "info", 1500); // Removido para não sobrepor o alerta de erro, se houver
     try {
         if (sectionId === 'produtos' || sectionId === 'produtos-consulta') {
             const products = await DataService.getProducts();
@@ -219,10 +251,10 @@ async function loadSectionContent(sectionId, currentUser) {
         } else if (sectionId === 'geral' || sectionId === 'vendas-painel' || sectionId === 'estoque' || !sectionId) { 
             await loadDashboardData(currentUser);
         } else if (sectionId === 'registrar-venda') {
-            renderRegisterSaleForm(dynamicContentArea, currentUser); // Nova função para registrar venda
+            renderRegisterSaleForm(dynamicContentArea, currentUser); 
         } else if (sectionId === 'vendas') {
             const sales = await DataService.getSales();
-            renderSalesList(sales, dynamicContentArea, currentUser.role); // Nova função para listar vendas
+            renderSalesList(sales, dynamicContentArea, currentUser.role); 
         }
         else {
             dynamicContentArea.innerHTML = `<div class="p-8 text-center text-slate-400">Seção "${sectionId}" ainda não implementada.</div>`;
@@ -230,13 +262,11 @@ async function loadSectionContent(sectionId, currentUser) {
     } catch (error) {
         console.error(`Erro ao carregar seção ${sectionId}:`, error);
         dynamicContentArea.innerHTML = `<div class="p-8 text-center text-red-400">Erro ao carregar conteúdo. Tente novamente.</div>`;
-        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, "error");
+        showTemporaryAlert(`Erro ao carregar ${sectionId}.`, 'error');
     }
 }
 
-// Função para renderizar a lista de produtos
 function renderProductsList(products, container, userRole) {
-    // ... (manter esta função como na versão main_js_section_loading)
     if (!container) { console.error("Container da lista de produtos não encontrado."); return; }
     container.innerHTML = ''; 
     const title = document.createElement('h2');
@@ -296,7 +326,6 @@ function renderProductsList(products, container, userRole) {
     container.appendChild(table);
 }
 
-// Funções globais para botões de ação da tabela (os listeners serão delegados)
 window.handleEditProduct = async (productId) => { 
     console.log("Tentando editar produto com ID:", productId);
     try {
@@ -312,7 +341,6 @@ window.handleEditProduct = async (productId) => {
     }
 };
 window.handleDeleteProductConfirmation = (productId, productName) => { 
-    // Usar um modal customizado em vez de confirm()
     showCustomConfirm(`Tem certeza que deseja excluir o produto "${productName}"? Esta ação não pode ser desfeita.`, async () => {
         try {
             await DataService.deleteProduct(productId);
@@ -333,10 +361,8 @@ window.handleDeleteProductConfirmation = (productId, productName) => {
     });
 };
 
-// Placeholder para as novas funções de renderização de seções
 function renderRegisterSaleForm(container, currentUser) {
     container.innerHTML = `<div class="p-8"><h2 class="text-xl font-semibold text-slate-100 mb-4">Registrar Nova Venda</h2><p class="text-slate-400">Formulário de registro de venda será implementado aqui.</p></div>`;
-    // TODO: Implementar formulário e lógica de registro de venda
 }
 
 function renderSalesList(sales, container, userRole) {
@@ -375,30 +401,14 @@ function renderSalesList(sales, container, userRole) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatDate(sale.date)}</td>
             <td class="px-6 py-4 text-sm text-slate-200">${productNames}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${formatCurrency(sale.total)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${sale.sellerName || sale.sellerId.substring(0,10)+'...'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-300">${sale.sellerName || (sale.sellerId ? sale.sellerId.substring(0,10)+'...' : 'N/A')}</td>
         `;
         tbody.appendChild(tr);
     });
     container.appendChild(table);
 }
 
-
-// --- Funções de UI e Utilitários (manter as versões mais recentes) ---
-// updateDashboardKPIs, renderDashboardMainCharts, updateRecentActivitiesUI, 
-// initializeUI, clearDashboardUI, updateUserInfo, setupEventListeners, 
-// handleLogin, showLoginError, handleLogout, notifications, initializeSidebar,
-// showTemporaryAlert, formatCurrency, formatDate, formatDateTime
-
-// ... (Cole aqui as versões mais recentes dessas funções que já estavam funcionando,
-//     especialmente `updateDashboardKPIs`, `renderDashboardMainCharts`, `updateRecentActivitiesUI`,
-//     `initializeUI`, `clearDashboardUI`, `updateUserInfo`, `handleLogin`, `showLoginError`, 
-//     `handleLogout`, as funções de notificação, `initializeSidebar`, `showTemporaryAlert`,
-//     e as funções de formatação de data/moeda. A função `setupEventListeners` abaixo
-//     é uma versão atualizada para incluir os listeners do modal.)
-
-// Atualizar KPIs do Dashboard
 function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser) {
-    // ... (código da versão main_js_section_loading) ...
     console.log("Atualizando KPIs para:", currentUser.role);
     const kpiValue1 = document.querySelector('#kpiContainer .kpi-card:nth-child(1) .kpi-value');
     const kpiTitle1 = document.querySelector('#kpiContainer .kpi-card:nth-child(1) .kpi-title');
@@ -438,8 +448,7 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
         if (kpiTitle4) kpiTitle4.textContent = "Adicionar Produto";
          if (kpiButtonContainer4 && !kpiButtonContainer4.querySelector('#addProductFromKPIButton')) { 
              kpiButtonContainer4.innerHTML = `<button class="btn-primary" id="addProductFromKPIButton">Adicionar</button>`;
-             // O listener para #addProductFromKPIButton é adicionado em setupEventListeners via delegação
-        }
+         }
     } else if (currentUser.role === 'Dono/Gerente') {
         if (kpiTitle1) kpiTitle1.textContent = "Receita Total (Geral)";
         if (kpiValue1) kpiValue1.textContent = formatCurrency(salesStats ? salesStats.totalRevenue : 0);
@@ -458,9 +467,7 @@ function updateDashboardKPIs(salesStats, productStats, allProducts, currentUser)
     }
 }
 
-// Função para renderizar gráficos do dashboard com dados dinâmicos
 function renderDashboardMainCharts(salesStats, topProductsData) {
-    // ... (código da versão main_js_section_loading) ...
     if (!document.getElementById('salesChart') || typeof Chart === 'undefined') { console.warn("Elemento do gráfico 'salesChart' ou Chart.js não disponível."); return; }
     if (!salesStats || !topProductsData) { console.warn("Dados para gráficos não disponíveis."); return; }
     const salesCtx = document.getElementById('salesChart').getContext('2d');
@@ -507,9 +514,7 @@ function renderDashboardMainCharts(salesStats, topProductsData) {
     });
 }
 
-// Atualizar UI de Atividades Recentes
 function updateRecentActivitiesUI(sales) {
-    // ... (código da versão main_js_section_loading) ...
     const activitiesContainer = document.getElementById('recentActivitiesContainer');
     if (!activitiesContainer) return;
     activitiesContainer.innerHTML = ''; 
@@ -533,9 +538,7 @@ function updateRecentActivitiesUI(sales) {
     });
 }
 
-// Funções de Inicialização da UI
 function initializeUI(currentUser) { 
-    // ... (código da versão main_js_section_loading) ...
     if (!currentUser) return; 
     updateUserInfo(currentUser);
     initializeNotifications();
@@ -549,7 +552,6 @@ function initializeUI(currentUser) {
 }
 
 function clearDashboardUI() {
-    // ... (código da versão main_js_section_loading) ...
     const userInitials = document.getElementById('userInitials');
     if (userInitials) userInitials.textContent = 'U';
     const userDropdownInitials = document.getElementById('userDropdownInitials');
@@ -590,7 +592,6 @@ function clearDashboardUI() {
 }
 
 function updateUserInfo(user) { 
-    // ... (código da versão main_js_section_loading) ...
     if (!user) return;
     const userInitialsEl = document.getElementById('userInitials');
     const userDropdownInitialsEl = document.getElementById('userDropdownInitials');
@@ -658,19 +659,28 @@ function setupEventListeners() {
             const section = navLink.dataset.section;
             window.location.hash = section; 
         }
-        if (e.target.closest('.edit-product-btn')) {
-            const button = e.target.closest('.edit-product-btn');
-            window.handleEditProduct(button.dataset.productId);
+        // Delegação para botões de produto
+        const editButton = e.target.closest('.edit-product-btn');
+        if (editButton) {
+            e.preventDefault(); 
+            console.log("Botão Editar clicado, ID:", editButton.dataset.productId);
+            window.handleEditProduct(editButton.dataset.productId);
         }
-        if (e.target.closest('.delete-product-btn')) {
-            const button = e.target.closest('.delete-product-btn');
-            window.handleDeleteProductConfirmation(button.dataset.productId, button.dataset.productName);
+        const deleteButton = e.target.closest('.delete-product-btn');
+        if (deleteButton) {
+            e.preventDefault();
+            console.log("Botão Excluir clicado, ID:", deleteButton.dataset.productId, "Nome:", deleteButton.dataset.productName);
+            window.handleDeleteProductConfirmation(deleteButton.dataset.productId, deleteButton.dataset.productName);
         }
-        if (e.target.id === 'openAddProductModalButton' || (e.target.closest('#openAddProductModalButton'))) {
+        const openModalButton = e.target.closest('#openAddProductModalButton');
+        if (openModalButton) {
+             e.preventDefault();
              console.log("Botão Adicionar Novo Produto clicado (delegação)");
              openProductModal();
         }
-        if (e.target.id === 'addProductFromKPIButton' || (e.target.closest('#addProductFromKPIButton'))) {
+        const addProductKPIButton = e.target.closest('#addProductFromKPIButton');
+        if (addProductKPIButton) {
+            e.preventDefault();
             console.log("Botão Adicionar Produto do KPI clicado (delegação)");
             openProductModal();
         }
@@ -704,52 +714,37 @@ function setupEventListeners() {
     if (productForm) productForm.addEventListener('submit', handleProductFormSubmit);
 }
 
-// Função para atualizar o estado ativo na sidebar
 function updateSidebarActiveState(currentSection) {
     document.querySelectorAll('#navLinks a.nav-link').forEach(l => l.classList.remove('active'));
     const activeLink = document.querySelector(`#navLinks a.nav-link[data-section="${currentSection}"]`);
     if (activeLink) activeLink.classList.add('active');
 }
 
-
-// Função para mostrar um modal de confirmação customizado
 function showCustomConfirm(message, onConfirm) {
-    // Remove qualquer modal de confirmação anterior
     const existingModal = document.getElementById('customConfirmModal');
     if (existingModal) existingModal.remove();
-
     const modalBackdrop = document.createElement('div');
     modalBackdrop.id = 'customConfirmModal';
-    modalBackdrop.className = 'modal-backdrop show'; // Usa 'show' para exibir imediatamente
-
+    modalBackdrop.className = 'modal-backdrop show'; 
     const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content show'; // Usa 'show' para exibir imediatamente
+    modalContent.className = 'modal-content show'; 
     modalContent.style.maxWidth = '400px';
-
     const modalHeader = document.createElement('div');
     modalHeader.className = 'modal-header';
     modalHeader.innerHTML = '<h3 class="modal-title">Confirmação</h3>';
-    
     const modalBody = document.createElement('div');
     modalBody.className = 'modal-body';
     modalBody.textContent = message;
-
     const modalFooter = document.createElement('div');
     modalFooter.className = 'modal-footer';
-
     const cancelButton = document.createElement('button');
     cancelButton.className = 'btn-secondary py-2 px-4 rounded-md hover:bg-slate-600';
     cancelButton.textContent = 'Cancelar';
     cancelButton.onclick = () => modalBackdrop.remove();
-
     const confirmButton = document.createElement('button');
-    confirmButton.className = 'btn-primary py-2 px-4 rounded-md bg-red-600 hover:bg-red-700'; // Estilo de perigo
+    confirmButton.className = 'btn-primary py-2 px-4 rounded-md bg-red-600 hover:bg-red-700'; 
     confirmButton.textContent = 'Confirmar Exclusão';
-    confirmButton.onclick = () => {
-        onConfirm();
-        modalBackdrop.remove();
-    };
-
+    confirmButton.onclick = () => { onConfirm(); modalBackdrop.remove(); };
     modalFooter.appendChild(cancelButton);
     modalFooter.appendChild(confirmButton);
     modalContent.appendChild(modalHeader);
@@ -759,9 +754,6 @@ function showCustomConfirm(message, onConfirm) {
     document.body.appendChild(modalBackdrop);
 }
 
-
-// ... (Restante das funções: handleLogin, showLoginError, handleLogout, notifications, initializeSidebar, showTemporaryAlert, formatCurrency, formatDate, formatDateTime)
-// COLE AQUI AS VERSÕES MAIS RECENTES E FUNCIONAIS DESSAS FUNÇÕES QUE VOCÊ JÁ TEM
 async function handleLogin(e) { e.preventDefault(); const email = document.getElementById('email').value; const password = document.getElementById('password').value; if (!email || !password) { showLoginError('Por favor, preencha email e senha.'); return; } const loginButton = e.target.querySelector('button[type="submit"]'); const originalButtonText = loginButton.textContent; loginButton.disabled = true; loginButton.textContent = 'Entrando...'; try { await firebase.auth().signInWithEmailAndPassword(email, password); showLoginError(''); } catch (error) { console.error("Erro de login:", error); let friendlyMessage = "Email ou senha inválidos."; if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') friendlyMessage = "Usuário não encontrado ou senha incorreta."; else if (error.code === 'auth/wrong-password') friendlyMessage = "Senha incorreta."; else if (error.code === 'auth/invalid-email') friendlyMessage = "O formato do email é inválido."; else if (error.code === 'auth/network-request-failed') friendlyMessage = "Erro de rede. Verifique sua conexão."; showLoginError(friendlyMessage); } finally { loginButton.disabled = false; loginButton.textContent = originalButtonText; } }
 function showLoginError(message) { const errorElement = document.getElementById('loginErrorMessage'); if (errorElement) { errorElement.textContent = message; errorElement.classList.toggle('hidden', !message); } }
 async function handleLogout() { try { await firebase.auth().signOut(); sessionStorage.removeItem('welcomeAlertShown'); window.location.hash = ''; console.log("Logout realizado com sucesso."); } catch (error) { console.error("Erro ao fazer logout:", error); showTemporaryAlert('Erro ao sair. Tente novamente.', 'error'); } }
