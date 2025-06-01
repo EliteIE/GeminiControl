@@ -5,7 +5,6 @@ let productModal, productForm, productModalTitle, productIdField, productNameFie
 
 // Configurações e Inicialização
 document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar variáveis do modal aqui, após o DOM estar pronto
     productModal = document.getElementById('productModal');
     productForm = document.getElementById('productForm');
     productModalTitle = document.getElementById('productModalTitle');
@@ -18,11 +17,10 @@ document.addEventListener('DOMContentLoaded', function() {
     cancelProductFormButton = document.getElementById('cancelProductFormButton');
     saveProductButton = document.getElementById('saveProductButton');
 
-    // Verifica se os elementos do modal foram encontrados no DOM
     if (!productModal) console.error("Elemento productModal (ID: productModal) não encontrado no DOM!");
     if (!productForm) console.error("Elemento productForm (ID: productForm) não encontrado no DOM!");
     
-    setupEventListeners(); // Configura todos os listeners, incluindo os do modal
+    setupEventListeners(); 
     
     firebase.auth().onAuthStateChanged(async (user) => {
         if (user) {
@@ -39,14 +37,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     initializeUI(currentUser); 
                     
                     const currentPath = window.location.pathname;
-                    // Ajuste para o caminho base no GitHub Pages ou ambiente local
                     const basePath = (window.location.hostname === "eliteie.github.io" || window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") ? "/GeminiControl/" : "/";
                     const isIndexPage = currentPath.endsWith('index.html') || currentPath === basePath || currentPath === (basePath + "index.html");
                     const isDashboardPage = currentPath.includes('dashboard.html');
 
                     if (isIndexPage) {
                         console.log("Redirecionando para dashboard.html...");
-                        // Mantém o hash se existir, para carregar a seção correta no dashboard
                         window.location.href = 'dashboard.html' + (window.location.hash || ''); 
                     } else if (isDashboardPage) {
                         console.log("Já está no dashboard, verificando hash da URL...");
@@ -69,8 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch (error) {
                 console.error("Erro no processo de autenticação ou busca de dados:", error);
                 showTemporaryAlert("Erro ao carregar dados do usuário. Verifique sua conexão.", "error");
-                // Considerar deslogar em caso de erro crítico para evitar loop
-                if (!window.location.pathname.endsWith('index.html')) { // Evita loop se já estiver no login
+                if (!window.location.pathname.endsWith('index.html')) { 
                     await firebase.auth().signOut();
                 }
             }
@@ -118,21 +113,35 @@ function openProductModal(product = null) {
         productIdField.value = ''; 
     }
     productModal.classList.remove('hidden');
-    console.log("Modal classList após remover 'hidden':", productModal.classList.toString());
-    console.log("Estilo de display do modal após remover 'hidden':", window.getComputedStyle(productModal).display);
+    // Força um reflow para garantir que a transição CSS funcione
+    void productModal.offsetWidth; 
+    productModal.classList.add('show'); // Adiciona a classe para a animação de entrada
+    if (productModal.querySelector('.modal-content')) {
+        productModal.querySelector('.modal-content').classList.add('show');
+    }
+    console.log("Modal classList após adicionar 'show':", productModal.classList.toString());
+    console.log("Estilo de display do modal:", window.getComputedStyle(productModal).display);
 }
 
 function closeProductModal() {
-    productModal = document.getElementById('productModal');
+    productModal = document.getElementById('productModal'); 
     if (productModal) {
-        productModal.classList.add('hidden');
-        console.log("Modal de produto fechado.");
+        productModal.classList.remove('show'); // Remove a classe para a animação de saída
+        if (productModal.querySelector('.modal-content')) {
+            productModal.querySelector('.modal-content').classList.remove('show');
+        }
+        // Adiciona 'hidden' de volta após a transição CSS (300ms)
+        setTimeout(() => {
+            productModal.classList.add('hidden');
+            console.log("Modal de produto fechado e classe 'hidden' readicionada.");
+        }, 300); // Deve corresponder à duração da transição no CSS
     } else {
         console.error("Elemento productModal não encontrado ao FECHAR.");
     }
 }
 
 async function handleProductFormSubmit(event) {
+    // ... (manter como na versão main_js_product_modal_final)
     event.preventDefault();
     console.log("Tentando salvar produto...");
     productIdField = document.getElementById('productId');
@@ -143,7 +152,8 @@ async function handleProductFormSubmit(event) {
     saveProductButton = document.getElementById('saveProductButton');
 
     if (!productNameField || !productCategoryField || !productPriceField || !productStockField || !productIdField || !saveProductButton) {
-        console.error("Campos do formulário de produto ou botão de salvar não encontrados."); return;
+        console.error("Campos do formulário de produto ou botão de salvar não encontrados durante o submit.");
+        return;
     }
     const id = productIdField.value;
     const productData = {
@@ -163,9 +173,11 @@ async function handleProductFormSubmit(event) {
 
     try {
         if (id) { 
+            console.log("Atualizando produto ID:", id, "com dados:", productData);
             await DataService.updateProduct(id, productData);
             showTemporaryAlert('Produto atualizado com sucesso!', 'success');
         } else { 
+            console.log("Adicionando novo produto com dados:", productData);
             await DataService.addProduct(productData);
             showTemporaryAlert('Produto adicionado com sucesso!', 'success');
         }
@@ -175,9 +187,11 @@ async function handleProductFormSubmit(event) {
             const userRole = localStorage.getItem('elitecontrol_user_role');
             const currentSection = window.location.hash.substring(1);
             const productSection = (userRole === 'Vendedor' ? 'produtos-consulta' : 'produtos');
+            
             if(currentSection === productSection){ 
                 loadSectionContent(productSection, {uid: currentUser.uid, email: currentUser.email, role: userRole });
             } else { 
+                 console.log("Produto salvo, mas não recarregando a lista pois não está na seção de produtos.");
                  if (document.activeElement && document.activeElement.id === 'addProductFromKPIButton') {
                     window.location.hash = productSection; 
                  }
@@ -193,6 +207,7 @@ async function handleProductFormSubmit(event) {
 }
 
 async function loadDashboardData(currentUser) {
+    // ... (manter como na versão main_js_product_modal_final)
     if (!currentUser || !DataService) { console.warn("loadDashboardData: currentUser ou DataService não disponível."); return; }
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) { console.error("dynamicContentArea não encontrado"); return; }
@@ -230,6 +245,7 @@ async function loadDashboardData(currentUser) {
 }
 
 async function loadSectionContent(sectionId, currentUser) {
+    // ... (manter como na versão main_js_product_modal_final)
     console.log(`Carregando seção: ${sectionId} para usuário:`, currentUser);
     const dynamicContentArea = document.getElementById('dynamicContentArea');
     if (!dynamicContentArea) {console.error("dynamicContentArea não encontrado em loadSectionContent"); return;}
@@ -257,6 +273,7 @@ async function loadSectionContent(sectionId, currentUser) {
 }
 
 function renderProductsList(products, container, userRole) {
+    // ... (manter como na versão main_js_product_modal_final)
     if (!container) { console.error("Container da lista de produtos não encontrado."); return; }
     container.innerHTML = ''; 
     const title = document.createElement('h2');
@@ -752,7 +769,7 @@ function updateNotificationsUI() { const list = document.getElementById('notific
 function markNotificationAsRead(id) { let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]'); notifications = notifications.map(n => n.id === id ? { ...n, read: true } : n); localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications)); updateNotificationsUI(); }
 function markAllNotificationsAsRead() { let notifications = JSON.parse(localStorage.getItem('elitecontrol_notifications') || '[]'); notifications = notifications.map(n => ({ ...n, read: true })); localStorage.setItem('elitecontrol_notifications', JSON.stringify(notifications)); updateNotificationsUI(); const dropdown = document.getElementById('notificationDropdown'); if (dropdown) dropdown.classList.add('hidden'); }
 function initializeSidebar(role) {  if (!document.getElementById('navLinks') || !role) return; let links = []; const currentHash = window.location.hash.substring(1); const defaultActiveSection = (role === 'Vendedor' ? 'vendas-painel' : (role === 'Controlador de Estoque' ? 'estoque' : 'geral')); const isActive = (section) => currentHash ? currentHash === section : section === defaultActiveSection; if (role === 'Dono/Gerente') links = [ { icon: 'fa-chart-pie', text: 'Painel Geral', active: isActive('geral'), section: 'geral' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-file-invoice-dollar', text: 'Vendas (Hist/Rel)', active: isActive('vendas'), section: 'vendas' }, { icon: 'fa-users-cog', text: 'Usuários', active: isActive('usuarios'), section: 'usuarios' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ]; else if (role === 'Controlador de Estoque') links = [ { icon: 'fa-warehouse', text: 'Painel Estoque', active: isActive('estoque'), section: 'estoque' }, { icon: 'fa-boxes-stacked', text: 'Produtos', active: isActive('produtos'), section: 'produtos' }, { icon: 'fa-truck-loading', text: 'Fornecedores', active: isActive('fornecedores'), section: 'fornecedores' }, { icon: 'fa-exchange-alt', text: 'Movimentações', active: isActive('movimentacoes'), section: 'movimentacoes' }, { icon: 'fa-clipboard-list', text: 'Relatórios de Estoque', active: isActive('relatorios-estoque'), section: 'relatorios-estoque' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ]; else if (role === 'Vendedor') links = [ { icon: 'fa-dollar-sign', text: 'Painel Vendas', active: isActive('vendas-painel'), section: 'vendas-painel' }, { icon: 'fa-boxes-stacked', text: 'Consultar Produtos', active: isActive('produtos-consulta'), section: 'produtos-consulta' }, { icon: 'fa-cash-register', text: 'Registrar Venda', active: isActive('registrar-venda'), section: 'registrar-venda' }, { icon: 'fa-history', text: 'Minhas Vendas', active: isActive('minhas-vendas'), section: 'minhas-vendas' }, { icon: 'fa-users', text: 'Clientes', active: isActive('clientes'), section: 'clientes' }, { icon: 'fa-cogs', text: 'Configurações', active: isActive('config'), section: 'config' } ]; else { links = [ { icon: 'fa-tachometer-alt', text: 'Painel Padrão', active: true, section: 'default-panel'}, { icon: 'fa-cog', text: 'Configurações', active: isActive('config'), section: 'config' } ]; console.warn(`Cargo (role) não reconhecido ou ausente: ${role}. Usando links padrão.`); } const navLinksContainer = document.getElementById('navLinks'); navLinksContainer.innerHTML = links.map(link => `<a href="#${link.section}" class="nav-link ${link.active ? 'active' : ''}" data-section="${link.section}"><i class="fas ${link.icon} nav-link-icon"></i><span>${link.text}</span></a>`).join(''); }
-function showTemporaryAlert(message, type = 'info', duration = 4000) { const container = document.getElementById('temporaryAlertsContainer'); if (!container) return; const alertDiv = document.createElement('div'); alertDiv.className = `temporary-alert temporary-alert-${type}`; alertDiv.innerHTML = `<div class="temporary-alert-content"><i class="fas ${type === 'info' ? 'fa-info-circle' : type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle'} temporary-alert-icon"></i><span class="temporary-alert-message">${message}</span></div><button class="temporary-alert-close" onclick="this.parentElement.remove()">&times;</button>`; container.appendChild(alertDiv); setTimeout(() => alertDiv.classList.add('show'), 10); setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration); }
+function showTemporaryAlert(message, type = 'info', duration = 4000) { const container = document.getElementById('temporaryAlertsContainer'); if (!container) return; const alertDiv = document.createElement('div'); alertDiv.className = `temporary-alert temporary-alert-${type}`; alertDiv.innerHTML = `<div class="temporary-alert-content"><i class="fas ${type === 'info' ? 'fa-info-circle' : type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : type === 'times-circle'} temporary-alert-icon"></i><span class="temporary-alert-message">${message}</span></div><button class="temporary-alert-close" onclick="this.parentElement.remove()">&times;</button>`; container.appendChild(alertDiv); setTimeout(() => alertDiv.classList.add('show'), 10); setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.remove(), 500); }, duration); }
 function formatCurrency(value) { if (typeof value !== 'number' || isNaN(value)) value = 0; return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
 function formatDate(dateInput) {  let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();  if (isNaN(date.getTime())) return "Data inválida";  return new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', year: 'numeric'}).format(date); }
 function formatDateTime(dateInput) { let date; if (dateInput instanceof Date) date = dateInput; else if (dateInput && typeof dateInput.toDate === 'function') date = dateInput.toDate(); else if (typeof dateInput === 'string' || typeof dateInput === 'number') date = new Date(dateInput); else date = new Date();   if (isNaN(date.getTime())) return "Data/hora inválida"; return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date); }
